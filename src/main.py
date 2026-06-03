@@ -1,11 +1,12 @@
 import sys
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication
+from src.app import MainWindow
 
 
 def main():
     app = QApplication(sys.argv)
-    label = QLabel("Whooshy — loading...")
-    label.show()
+    window = MainWindow()
+    window.show()
     sys.exit(app.exec())
 
 

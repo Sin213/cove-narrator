@@ -1,0 +1,7 @@
+kokoro-onnx>=0.4.7
+onnxruntime>=1.20.1
+sounddevice>=0.5
+soundfile>=0.12
+numpy>=2.0
+librosa>=0.10
+pytest>=8.0

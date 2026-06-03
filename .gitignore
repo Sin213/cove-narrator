@@ -3,7 +3,10 @@ __pycache__/
 .venv/
 *.egg-info/
 dist/
-build/
+build/tmp/
+!build/
+!build/pyinstaller/
+!build/deb/
 data/models/*.onnx
 data/models/*.bin
 .superpowers/

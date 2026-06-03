@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from PySide6.QtCore import Qt
+from src.utils.config import load_config, save_config
 from src.engine.tts import TTSEngine
 from src.utils.audio_player import AudioPlayer
 from src.utils.presets import PresetManager, Preset
@@ -46,6 +47,19 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._tabs)
 
         self._voice_combo.currentIndexChanged.connect(self._on_voice_changed)
+
+        self._config = load_config()
+        self.resize(self._config["window_width"], self._config["window_height"])
+
+    def closeEvent(self, event):
+        self._config["window_width"] = self.width()
+        self._config["window_height"] = self.height()
+        preset = self._voice_combo.currentData()
+        if preset:
+            self._config["last_voice"] = preset.voice_id
+        save_config(self._config)
+        self._player.stop()
+        event.accept()
 
     def _populate_voices(self):
         self._voice_combo.clear()

@@ -8,7 +8,7 @@ Whooshy is a simplified, fully offline text-to-speech desktop application. Users
 
 ## Goals
 
-- Fully offline and portable after first-launch model download
+- Fully offline and portable — all dependencies and models bundled, no network required ever
 - Two modes: simple text-to-speech (Tab 1) and phoneme-level voice building (Tab 2)
 - Adjustable pitch, speed, and expressiveness ("depth") via sliders (-100 to +100, default 0)
 - Export generated audio as WAV
@@ -42,7 +42,7 @@ whooshy-project/
 │   │   ├── phonemes.py      # English phoneme inventory (~44) + Kokoro mapping
 │   │   └── dictionary.py    # CMU Pronouncing Dictionary lookup + G2P fallback
 │   ├── models/
-│   │   └── manager.py       # First-launch model download + verification
+│   │   └── loader.py        # Bundled model loader + verification
 │   └── utils/
 │       ├── audio_player.py  # sounddevice playback wrapper
 │       ├── export.py        # WAV export
@@ -155,13 +155,12 @@ Preset schema:
 - User-created presets can be edited and deleted.
 - Dropdown shows built-ins first, then a separator, then user presets.
 
-### Model Manager (`models/manager.py`)
+### Model Loader (`models/loader.py`)
 
-- Model directory: `~/.local/share/whooshy/models/`
-- On app launch: check if the Kokoro ONNX model file exists and SHA256 matches.
-- If missing: show a modal download dialog with progress bar. Download from HuggingFace, verify SHA256, save.
-- If corrupted: re-download.
-- No network access after successful model verification.
+- Model ships bundled inside the package at `data/models/`.
+- On app launch: locate the bundled model relative to the executable/script path, verify SHA256.
+- If verification fails: show error dialog ("model file corrupted, please reinstall").
+- No network access, ever. Fully offline.
 
 ### Audio Player (`utils/audio_player.py`)
 
@@ -230,20 +229,21 @@ librosa              # Reference audio analysis (pitch, tempo, spectral)
 
 ## First-Launch Experience
 
-1. App opens to a model download dialog: "Whooshy needs to download the Kokoro voice model (~300 MB). This is a one-time download."
-2. Progress bar shows download progress.
-3. SHA256 verification on completion.
-4. On success: dialog closes, app opens to Tab 1 with the default voice selected.
-5. On failure: retry button + error message. App cannot proceed without the model.
+1. App opens directly to Tab 1 with the default voice selected — no download, no setup wizard.
+2. Model is bundled in the package and verified at startup (SHA256 check, ~100ms).
+3. If model is corrupted: error dialog with "please reinstall" message.
 
-## Platform Support
+## Platform Support & Packaging
 
-- **Linux**: Primary target. PySide6 + sounddevice work out of the box.
-- **Windows**: Secondary. PyInstaller packaging. sounddevice uses WASAPI.
+All packages bundle the Kokoro model (~300 MB) and all Python dependencies. Estimated package size: ~350-400 MB.
+
+- **Linux AppImage**: Primary portable target. Single file, runs on any distro, no install needed. Built via `appimage-builder` or `python-appimage`.
+- **Linux .deb**: For Debian/Ubuntu users who prefer system install. Built via `fpm` or `stdeb`.
+- **Windows .exe**: PyInstaller one-dir or one-file bundle. sounddevice uses WASAPI. Unsigned (SmartScreen warning expected; code signing is a v2 concern).
 - **macOS**: Deferred to v1.1 (notarization complexity).
 
 ## Configuration Files
 
 - `~/.config/whooshy/config.json` — save directory, last-used voice, window geometry
 - `~/.config/whooshy/presets/*.json` — user voice presets
-- `~/.local/share/whooshy/models/` — downloaded Kokoro ONNX model
+- `data/models/` (inside package) — bundled Kokoro ONNX model

@@ -1,4 +1,3 @@
-import threading
 import numpy as np
 import sounddevice as sd
 from PySide6.QtCore import QObject, Signal
@@ -16,7 +15,6 @@ class AudioPlayer(QObject):
         self._is_playing = False
         self._is_paused = False
         self._stream: sd.OutputStream | None = None
-        self._lock = threading.Lock()
 
     @property
     def is_playing(self) -> bool:
@@ -46,6 +44,7 @@ class AudioPlayer(QObject):
         self.state_changed.emit("playing")
         self._stream = sd.OutputStream(
             samplerate=self._sr, channels=1, dtype="float32",
+            blocksize=4096,
             callback=self._callback, finished_callback=self._on_finished,
         )
         self._stream.start()
@@ -67,22 +66,21 @@ class AudioPlayer(QObject):
         self.state_changed.emit("stopped")
 
     def _callback(self, outdata, frames, time_info, status):
-        with self._lock:
-            if self._audio is None or not self._is_playing:
-                outdata[:] = 0
-                if self._is_paused:
-                    return
-                raise sd.CallbackStop()
-            end = self._position + frames
-            if end >= len(self._audio):
-                remaining = len(self._audio) - self._position
-                outdata[:remaining, 0] = self._audio[self._position:]
-                outdata[remaining:] = 0
-                self._position = len(self._audio)
-                raise sd.CallbackStop()
-            else:
-                outdata[:, 0] = self._audio[self._position:end]
-                self._position = end
+        if self._audio is None or not self._is_playing:
+            outdata[:] = 0
+            if self._is_paused:
+                return
+            raise sd.CallbackStop()
+        end = self._position + frames
+        if end >= len(self._audio):
+            remaining = len(self._audio) - self._position
+            outdata[:remaining, 0] = self._audio[self._position:]
+            outdata[remaining:] = 0
+            self._position = len(self._audio)
+            raise sd.CallbackStop()
+        else:
+            outdata[:, 0] = self._audio[self._position:end]
+            self._position = end
 
     def _on_finished(self):
         self._is_playing = False

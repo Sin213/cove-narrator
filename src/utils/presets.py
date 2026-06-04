@@ -12,21 +12,37 @@ class Preset:
     is_builtin: bool = False
 
 _BUILTIN_VOICES = [
-    ("Heart (F)", "af_heart"),
-    ("Bella (F)", "af_bella"),
-    ("Nova (F)", "af_nova"),
-    ("Sarah (F)", "af_sarah"),
-    ("Nicole (F)", "af_nicole"),
-    ("Sky (F)", "af_sky"),
-    ("River (F)", "af_river"),
-    ("Adam (M)", "am_adam"),
-    ("Michael (M)", "am_michael"),
-    ("Eric (M)", "am_eric"),
-    ("Liam (M)", "am_liam"),
-    ("Alice (BF)", "bf_alice"),
-    ("Emma (BF)", "bf_emma"),
-    ("Daniel (BM)", "bm_daniel"),
-    ("George (BM)", "bm_george"),
+    # American Female
+    ("Heart — warm, friendly", "af_heart"),
+    ("Bella — smooth, gentle", "af_bella"),
+    ("Nova — bright, energetic", "af_nova"),
+    ("Sarah — clear, neutral", "af_sarah"),
+    ("Nicole — soft, calm", "af_nicole"),
+    ("Sky — light, airy", "af_sky"),
+    ("River — steady, soothing", "af_river"),
+    ("Jessica — crisp, confident", "af_jessica"),
+    ("Alloy — clean, modern", "af_alloy"),
+    ("Kore — direct, focused", "af_kore"),
+    ("Aoede — melodic, expressive", "af_aoede"),
+    # American Male
+    ("Adam — deep, authoritative", "am_adam"),
+    ("Michael — balanced, narrator", "am_michael"),
+    ("Eric — warm, conversational", "am_eric"),
+    ("Liam — young, casual", "am_liam"),
+    ("Echo — smooth, resonant", "am_echo"),
+    ("Onyx — low, dramatic", "am_onyx"),
+    ("Puck — playful, lively", "am_puck"),
+    ("Fenrir — bold, intense", "am_fenrir"),
+    # British Female
+    ("Alice — poised, refined (UK)", "bf_alice"),
+    ("Emma — warm, articulate (UK)", "bf_emma"),
+    ("Isabella — elegant, precise (UK)", "bf_isabella"),
+    ("Lily — gentle, soft (UK)", "bf_lily"),
+    # British Male
+    ("Daniel — classic, composed (UK)", "bm_daniel"),
+    ("George — rich, dignified (UK)", "bm_george"),
+    ("Fable — storyteller, expressive (UK)", "bm_fable"),
+    ("Lewis — clear, steady (UK)", "bm_lewis"),
 ]
 
 class PresetManager:

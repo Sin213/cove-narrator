@@ -1,64 +1,186 @@
 # Cove Narrator
 
-Offline text-to-speech desktop app with voice blending, phoneme-level control, and document reading. Built on [Kokoro ONNX](https://github.com/thewh1teagle/kokoro-onnx) — all processing runs locally, no network required.
+Fully offline text-to-speech desktop app with voice blending, phoneme-level pronunciation control, and document reading. Built on [Kokoro ONNX](https://github.com/thewh1teagle/kokoro-onnx) — all processing runs locally on your machine. No accounts, no API keys, no network required after setup.
+
+Cross-platform: **Linux** and **Windows**. Same codebase, same features on both.
 
 ## Features
 
-- **Simple mode** — Type text, drop in inline tags (`[Pause]`, `[Soft]`, `[Slow]`, `[Speed]`, `[Pitch]`), and hit Play. Unknown words get flagged so you can spell them out in Custom mode.
-- **Custom mode** — Spell tricky words phonetically with ARPABET buttons. Drop a reference audio clip to auto-match the closest voice blend by pitch analysis.
-- **Reader mode** — Open `.txt` or `.pdf` files and read them sentence by sentence with live highlighting. Click any sentence to jump there. Next-sentence prefetch for seamless playback.
-- **27 built-in voices** — American and British, male and female, with personality descriptions. Search and filter in the voice gallery.
-- **Voice blending** — Drop a reference clip and Cove finds the optimal mix of kokoro voices to match its pitch. Save custom blends by name and reuse them.
-- **Audio DSP** — Pitch, speed, and depth sliders with per-slider color coding. WAV export.
-- **Presets** — Save and load slider + voice combinations.
+**Three modes:**
+
+- **Simple** — Type or paste text, drop in inline tags (`[Pause]`, `[Soft]`, `[Slow]`, `[Speed]`, `[Pitch]`), hit Play. Unknown words get flagged so you can spell them out in Custom mode.
+- **Custom** — Spell tricky words phonetically with ARPABET buttons. Drop a reference audio clip and Cove analyzes it, picks the closest voice blend, and sets sliders to match.
+- **Reader** — Open `.txt` or `.pdf` files. Cove reads sentence by sentence with live highlighting. Click any sentence to jump. Next-sentence prefetch keeps playback seamless.
+
+**Voice system:**
+
+- 27 built-in voices — American and British, male and female, each with a personality description (warm, dramatic, playful, etc.)
+- Voice gallery with search and region/gender filters
+- **Voice blending** — Drop a reference clip and Cove finds the optimal mix of built-in voices to match its pitch (e.g. 70% Onyx + 30% Echo). Save blends by name and reuse them across sessions.
+
+**Audio:**
+
+- Pitch, speed, and depth sliders with color-coded pips
+- WAV export (PCM 16-bit or 32-bit)
+- Inline tag system for fine-grained control over pacing and emphasis
+- Configurable keyboard shortcuts (Play/Pause, Stop, Export)
+
+**Design:**
+
+- Cove dark theme with teal accent
+- Custom frameless titlebar with min/max/close controls
+- Sidebar layout with mode navigation, voice card, and presets
 
 ## Requirements
 
 - Python 3.10+
-- PySide6, kokoro-onnx, onnxruntime, sounddevice, soundfile, numpy, librosa, pymupdf
+- Kokoro model files (see [Setup](#setup))
+- **Linux:** PulseAudio or PipeWire for audio output
+- **Windows:** No extra audio setup needed
 
 ## Setup
 
+### Linux
+
 ```bash
-python -m venv .venv
+git clone https://github.com/user/cove-narrator.git
+cd cove-narrator
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Kokoro model files go in `data/models/`:
-- `kokoro-v1.0.onnx`
-- `voices-v1.0.bin`
+### Windows
+
+```powershell
+git clone https://github.com/user/cove-narrator.git
+cd cove-narrator
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Model files
+
+Download the Kokoro v1.0 model files and place them in `data/models/`:
+
+- `kokoro-v1.0.onnx` (~85 MB)
+- `voices-v1.0.bin` (~53 MB)
+
+These are required for synthesis. The app will not start without them.
 
 ## Run
 
+### Linux
+
 ```bash
+source .venv/bin/activate
 python -m src.main
 ```
 
-## Build
+### Windows
+
+```powershell
+.venv\Scripts\activate
+python -m src.main
+```
+
+## Build standalone executable
+
+The PyInstaller spec bundles models, voices, and the CMU dictionary into a single distributable folder.
+
+### Linux
 
 ```bash
 bash build/build.sh
+# Output: dist/cove-narrator/cove-narrator
 ```
 
-Produces `dist/cove-narrator/` with a standalone executable.
+### Windows
 
-## Config
+```powershell
+.venv\Scripts\pip install pyinstaller
+.venv\Scripts\pyinstaller build\pyinstaller\cove-narrator.spec --distpath dist\ --workpath build\tmp --clean
+# Output: dist\cove-narrator\cove-narrator.exe
+```
 
-- Settings: `~/.config/cove-narrator/config.json`
-- Presets: `~/.config/cove-narrator/presets/`
-- Custom voices: `~/.config/cove-narrator/voices/`
-- Exports: `~/Music/Cove Narrator/`
+The `dist/cove-narrator/` folder is fully portable — copy it anywhere and run.
 
-## Keyboard Shortcuts
+## Project structure
 
-| Action | Default |
-|--------|---------|
-| Play / Pause | Space |
-| Stop | Escape |
-| Export WAV | Ctrl+E |
+```
+cove-narrator/
+  src/
+    main.py              Entry point
+    app.py               Main window, sidebar, voice gallery
+    engine/
+      tts.py             TTS synthesis (text, hybrid, raw, phonemes)
+      analyzer.py        Reference audio analysis (F0, gender detection)
+      audio_dsp.py       Pitch shift, depth, speed conversion
+      voice_blend.py     Voice blend optimizer + custom voice storage
+    tabs/
+      simple_tab.py      Simple narration with inline tags
+      custom_tab.py      Phoneme builder + reference audio matching
+      reader_tab.py      Document reader with sentence tracking
+    utils/
+      theme.py           Cove dark theme (QSS stylesheet)
+      chrome.py          Custom frameless titlebar + edge resizing
+      config.py          Config persistence + Whooshy migration
+      presets.py          Voice preset save/load
+      export.py          WAV export
+      audio_player.py    Playback with pause/resume
+      settings_dialog.py Settings UI
+    data/
+      dictionary.py      CMU dictionary + G2P fallback
+      phonemes.py        ARPABET phoneme inventory
+    models/
+      loader.py          Model file discovery
+  data/
+    models/              Kokoro ONNX model + voice pack
+    cmudict.txt          CMU pronunciation dictionary
+  build/
+    icon.png             App icon
+    build.sh             Linux build script
+    pyinstaller/         PyInstaller spec
+    deb/                 Debian packaging notes
+  tests/                 pytest test suite
+```
 
-Shortcuts are configurable in Settings.
+## Config paths
+
+| Platform | Config | Presets | Custom voices | Exports |
+|----------|--------|---------|---------------|---------|
+| Linux | `~/.config/cove-narrator/config.json` | `~/.config/cove-narrator/presets/` | `~/.config/cove-narrator/voices/` | `~/Music/Cove Narrator/` |
+| Windows | `%USERPROFILE%\.config\cove-narrator\config.json` | `%USERPROFILE%\.config\cove-narrator\presets\` | `%USERPROFILE%\.config\cove-narrator\voices\` | `%USERPROFILE%\Music\Cove Narrator\` |
+
+Users upgrading from Whooshy: existing config and presets are automatically migrated on first launch.
+
+## Keyboard shortcuts
+
+| Action | Default | Configurable |
+|--------|---------|:---:|
+| Play / Pause | Space | Yes |
+| Stop | Escape | Yes |
+| Export WAV | Ctrl+E | Yes |
+
+Change shortcuts in Settings (sidebar → Settings).
+
+## Inline tags (Simple mode)
+
+| Tag | Effect |
+|-----|--------|
+| `[Pause]` | 0.5s silence. `[Pause 1.5]` for custom duration |
+| `[Speed 1.5]` | Speed up next segment. 0.5 = slow, 2.0 = fast |
+| `[Pitch 30]` | Shift pitch. Range: -100 to 100 |
+| `[Soft]` | Quieter (~40% volume) |
+| `[Slow]` | Slower (0.7x speed) |
+
+## Tests
+
+```bash
+source .venv/bin/activate
+pytest
+```
 
 ## License
 

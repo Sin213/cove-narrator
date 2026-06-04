@@ -71,6 +71,7 @@ $commonArgs = @(
     '--collect-data', 'kokoro_onnx',
     '--collect-data', 'phonemizer',
     '--collect-data', 'language_tags',
+    '--collect-data', 'espeakng_loader',
     '--add-data', ("data\models\kokoro-v1.0.onnx" + [IO.Path]::PathSeparator + "data\models"),
     '--add-data', ("data\models\voices-v1.0.bin" + [IO.Path]::PathSeparator + "data\models"),
     '--add-data', ("data\cmudict.txt" + [IO.Path]::PathSeparator + "data"),
@@ -115,6 +116,7 @@ $portableName = "$App-portable"
     --collect-data kokoro_onnx `
     --collect-data phonemizer `
     --collect-data language_tags `
+    --collect-data espeakng_loader `
     --add-data ("data\models\kokoro-v1.0.onnx" + [IO.Path]::PathSeparator + "data\models") `
     --add-data ("data\models\voices-v1.0.bin" + [IO.Path]::PathSeparator + "data\models") `
     --add-data ("data\cmudict.txt" + [IO.Path]::PathSeparator + "data") `

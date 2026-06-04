@@ -25,7 +25,7 @@ class SettingsDialog(QDialog):
         output_form = QFormLayout(output_group)
 
         self._dir_label = QLabel(self._config.get("save_dir", ""))
-        self._dir_label.setStyleSheet("color: #aaa;")
+        self._dir_label.setObjectName("voiceDesc")
         dir_row = QHBoxLayout()
         dir_row.addWidget(self._dir_label, 1)
         dir_btn = QPushButton("Browse...")

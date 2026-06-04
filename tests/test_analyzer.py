@@ -14,15 +14,18 @@ def _make_test_wav(tmp_path: Path, freq=220.0, duration=2.0, sr=24000) -> Path:
 
 def test_analyze_returns_three_ints(tmp_path):
     wav = _make_test_wav(tmp_path)
-    pitch, speed, depth = analyze_reference(str(wav))
+    pitch, speed, depth, gender, median_f0 = analyze_reference(str(wav))
     assert isinstance(pitch, int)
     assert isinstance(speed, int)
     assert isinstance(depth, int)
+    assert gender in ("F", "M")
+    assert isinstance(median_f0, float)
+    assert median_f0 > 0
 
 
 def test_analyze_values_in_range(tmp_path):
     wav = _make_test_wav(tmp_path)
-    pitch, speed, depth = analyze_reference(str(wav))
+    pitch, speed, depth, gender, median_f0 = analyze_reference(str(wav))
     assert -100 <= pitch <= 100
     assert -100 <= speed <= 100
     assert -100 <= depth <= 100

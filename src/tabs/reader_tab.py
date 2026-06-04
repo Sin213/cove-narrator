@@ -60,7 +60,7 @@ class ReaderTab(QWidget):
         super().__init__(parent)
         self._engine = engine
         self._player = player
-        self._save_dir = Path.home() / "Music" / "Whooshy"
+        self._save_dir = Path.home() / "Music" / "Cove Narrator"
         self._worker: ChunkWorker | None = None
 
         self._sentences: list[str] = []
@@ -75,11 +75,12 @@ class ReaderTab(QWidget):
 
         # File controls
         file_row = QHBoxLayout()
-        self._open_btn = QPushButton("Open File")
+        self._open_btn = QPushButton("📂  Open File")
+        self._open_btn.setObjectName("openFileButton")
         self._open_btn.clicked.connect(self._open_file)
         file_row.addWidget(self._open_btn)
         self._file_label = QLabel("No file loaded")
-        self._file_label.setStyleSheet("color: #888;")
+        self._file_label.setObjectName("voiceDesc")
         file_row.addWidget(self._file_label, 1)
         layout.addLayout(file_row)
 
@@ -87,7 +88,7 @@ class ReaderTab(QWidget):
         self._text_display = QTextEdit()
         self._text_display.setReadOnly(True)
         self._text_display.setPlaceholderText(
-            "Open a .txt file or paste text here to start reading.\n"
+            "Open a .txt or .pdf file, or paste text here to start reading.\n"
             "Click anywhere in the text to start reading from that point."
         )
         self._text_display.setReadOnly(False)
@@ -102,15 +103,15 @@ class ReaderTab(QWidget):
         self._progress.setFormat("%v / %m sentences")
         progress_row.addWidget(self._progress)
         self._time_label = QLabel("")
-        self._time_label.setStyleSheet("color: #888; font-size: 11px;")
+        self._time_label.setObjectName("statusLabel")
         progress_row.addWidget(self._time_label)
         layout.addLayout(progress_row)
 
         # Sliders
         slider_layout = QHBoxLayout()
-        self._pitch_slider, self._pitch_spin, pitch_group = self._make_slider("Pitch")
-        self._speed_slider, self._speed_spin, speed_group = self._make_slider("Speed")
-        self._depth_slider, self._depth_spin, depth_group = self._make_slider("Depth")
+        self._pitch_slider, self._pitch_spin, pitch_group = self._make_slider("Pitch", "#7fd0ff")
+        self._speed_slider, self._speed_spin, speed_group = self._make_slider("Speed", "#50e6cf")
+        self._depth_slider, self._depth_spin, depth_group = self._make_slider("Depth", "#c89bff")
         slider_layout.addLayout(pitch_group)
         slider_layout.addLayout(speed_group)
         slider_layout.addLayout(depth_group)
@@ -118,15 +119,18 @@ class ReaderTab(QWidget):
 
         # Controls
         controls = QHBoxLayout()
-        self._play_btn = QPushButton("▶ Read")
+        self._play_btn = QPushButton("▶  Read")
+        self._play_btn.setObjectName("playButton")
         self._play_btn.clicked.connect(self._on_play)
         controls.addWidget(self._play_btn)
 
-        self._stop_btn = QPushButton("⏹ Stop")
+        self._stop_btn = QPushButton("⏹  Stop")
+        self._stop_btn.setObjectName("stopButton")
         self._stop_btn.clicked.connect(self._on_stop)
         controls.addWidget(self._stop_btn)
 
-        self._export_btn = QPushButton("⬇ Export All as WAV")
+        self._export_btn = QPushButton("⬇  Export All as WAV")
+        self._export_btn.setObjectName("exportButton")
         self._export_btn.clicked.connect(self._on_export)
         controls.addWidget(self._export_btn)
 
@@ -134,15 +138,21 @@ class ReaderTab(QWidget):
         layout.addLayout(controls)
 
         self._status = QLabel("")
+        self._status.setObjectName("statusLabel")
         layout.addWidget(self._status)
 
         self._player.playback_finished.connect(self._on_chunk_finished)
         self._player.state_changed.connect(self._on_playback_state)
 
-    def _make_slider(self, name: str) -> tuple[QSlider, QSpinBox, QVBoxLayout]:
+    def _make_slider(self, name: str, color: str = "#50e6cf") -> tuple[QSlider, QSpinBox, QVBoxLayout]:
         group = QVBoxLayout()
         top_row = QHBoxLayout()
+        pip = QLabel("●")
+        pip.setStyleSheet(f"color: {color}; font-size: 6px;")
+        pip.setFixedWidth(10)
+        top_row.addWidget(pip)
         label = QLabel(f"{name}:")
+        label.setObjectName("sliderName")
         spin = QSpinBox()
         spin.setRange(-100, 100)
         spin.setValue(0)
@@ -325,8 +335,8 @@ class ReaderTab(QWidget):
         cursor.clearSelection()
 
         highlight_fmt = QTextCharFormat()
-        highlight_fmt.setBackground(QColor(60, 60, 120))
-        highlight_fmt.setForeground(QColor(200, 220, 255))
+        highlight_fmt.setBackground(QColor(80, 230, 207, 36))
+        highlight_fmt.setForeground(QColor(236, 236, 241))
 
         cursor.setPosition(start)
         cursor.setPosition(end, QTextCursor.KeepAnchor)

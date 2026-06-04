@@ -20,6 +20,29 @@ TAGS_HELP = [
 ]
 
 
+_SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?;])\s+|(?<=,)\s+')
+_MAX_CHUNK_WORDS = 25
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split text into sentence-sized chunks so kokoro doesn't truncate."""
+    parts = _SENTENCE_SPLIT_RE.split(text)
+    result = []
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        words = p.split()
+        if len(words) <= _MAX_CHUNK_WORDS:
+            result.append(p)
+        else:
+            for i in range(0, len(words), _MAX_CHUNK_WORDS):
+                chunk = " ".join(words[i:i + _MAX_CHUNK_WORDS])
+                if chunk:
+                    result.append(chunk)
+    return result if result else [text]
+
+
 def _fade_out(samples: np.ndarray, sr: int, duration: float = 0.05) -> np.ndarray:
     fade_len = int(sr * duration)
     if fade_len >= len(samples):
@@ -30,13 +53,15 @@ def _fade_out(samples: np.ndarray, sr: int, duration: float = 0.05) -> np.ndarra
     return samples
 
 
-def _finish_audio(samples: np.ndarray, sr: int) -> np.ndarray:
+def _finish_audio(samples: np.ndarray, sr: int, skip_trim: bool = False) -> np.ndarray:
+    if not skip_trim:
+        samples = _trim_trailing_silence(samples, sr)
     samples = _fade_out(samples, sr)
-    pad = np.zeros(int(sr * 0.1), dtype=np.float32)
+    pad = np.zeros(int(sr * 0.15), dtype=np.float32)
     return np.concatenate([samples, pad])
 
 
-def _trim_trailing_silence(samples: np.ndarray, sr: int, tail: float = 0.1, threshold: float = 0.005) -> np.ndarray:
+def _trim_trailing_silence(samples: np.ndarray, sr: int, tail: float = 0.15, threshold: float = 0.001) -> np.ndarray:
     frame = 512
     i = len(samples) - frame
     while i > 0:
@@ -103,35 +128,42 @@ class TTSEngine:
                 if not clean:
                     continue
 
-                samples, sr = self._kokoro.create(
-                    clean, voice=voice, speed=seg_speed, lang="en-us", trim=True
-                )
-
-                if seg_pitch != 0:
-                    samples = apply_pitch_shift(samples, seg_pitch, sr)
-
-                if seg_soft:
-                    samples = samples * 0.4
-
-                parts.append(samples)
+                for sent in _split_sentences(clean):
+                    samples, sr = self._kokoro.create(
+                        sent, voice=voice, speed=seg_speed,
+                        lang="en-us", trim=False
+                    )
+                    if seg_pitch != 0:
+                        samples = apply_pitch_shift(samples, seg_pitch, sr)
+                    if seg_soft:
+                        samples = samples * 0.4
+                    parts.append(samples)
 
         if not parts:
             return _make_silence(sr, 0.1), sr
+        ends_with_pause = np.max(np.abs(parts[-1])) < 1e-6
         result = np.concatenate(parts)
-        result = _finish_audio(result, sr)
+        result = _finish_audio(result, sr, skip_trim=ends_with_pause)
         return result, sr
 
     def synthesize_raw(self, text: str, voice: str, speed: float = 1.0) -> tuple[np.ndarray, int]:
-        samples, sr = self._kokoro.create(
-            text, voice=voice, speed=speed, lang="en-us", trim=True
-        )
+        parts: list[np.ndarray] = []
+        sr = 24000
+        for sent in _split_sentences(text):
+            samples, sr = self._kokoro.create(
+                sent, voice=voice, speed=speed, lang="en-us", trim=False
+            )
+            parts.append(samples)
+        if not parts:
+            return _make_silence(sr, 0.1), sr
+        result = np.concatenate(parts)
         pad = np.zeros(int(sr * 0.25), dtype=np.float32)
-        samples = np.concatenate([samples, pad])
-        return samples, sr
+        result = np.concatenate([result, pad])
+        return result, sr
 
     def synthesize_phonemes(self, phonemes: str, voice: str, speed: float = 1.0) -> tuple[np.ndarray, int]:
         samples, sr = self._kokoro.create(
-            phonemes, voice=voice, speed=speed, lang="en-us", is_phonemes=True, trim=True
+            phonemes, voice=voice, speed=speed, lang="en-us", is_phonemes=True, trim=False
         )
         samples = _finish_audio(samples, sr)
         return samples, sr
@@ -153,14 +185,16 @@ class TTSEngine:
                 if ipa.strip():
                     samples, sr = self._kokoro.create(
                         ipa, voice=voice, speed=speed,
-                        lang="en-us", is_phonemes=True, trim=True
+                        lang="en-us", is_phonemes=True, trim=False
                     )
                     parts.append(samples)
             else:
-                samples, sr = self._kokoro.create(
-                    chunk, voice=voice, speed=speed, lang="en-us", trim=True
-                )
-                parts.append(samples)
+                for sentence in _split_sentences(chunk):
+                    samples, sr = self._kokoro.create(
+                        sentence, voice=voice, speed=speed,
+                        lang="en-us", trim=False
+                    )
+                    parts.append(samples)
 
         if not parts:
             return _make_silence(sr, 0.1), sr

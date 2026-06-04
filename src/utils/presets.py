@@ -47,7 +47,7 @@ _BUILTIN_VOICES = [
 
 class PresetManager:
     def __init__(self, config_dir: Path | None = None):
-        self._dir = config_dir or Path.home() / ".config" / "whooshy" / "presets"
+        self._dir = config_dir or Path.home() / ".config" / "cove-narrator" / "presets"
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def get_builtin_presets(self) -> list[Preset]:

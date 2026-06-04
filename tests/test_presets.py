@@ -2,7 +2,7 @@ from pathlib import Path
 from src.utils.presets import PresetManager, Preset
 
 def test_builtin_presets_exist():
-    pm = PresetManager(config_dir=Path("/tmp/whooshy-test-presets"))
+    pm = PresetManager(config_dir=Path("/tmp/cove-narrator-test-presets"))
     builtins = pm.get_builtin_presets()
     assert len(builtins) > 0
     assert any(p.voice_id == "af_heart" for p in builtins)

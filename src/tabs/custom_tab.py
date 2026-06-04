@@ -40,18 +40,30 @@ class HybridSynthWorker(QThread):
 
 
 class AnalyzeWorker(QThread):
-    finished = Signal(int, int, int)
+    finished = Signal(object)
+    progress = Signal(str)
     error = Signal(str)
 
-    def __init__(self, file_path):
+    def __init__(self, file_path, kokoro):
         super().__init__()
         self._file_path = file_path
+        self._kokoro = kokoro
 
     def run(self):
         try:
             from src.engine.analyzer import analyze_reference
-            pitch, speed, depth = analyze_reference(self._file_path)
-            self.finished.emit(pitch, speed, depth)
+            from src.engine.voice_blend import find_best_blend
+            _, speed, depth, gender, median_f0 = analyze_reference(self._file_path)
+            self.progress.emit(f"Finding best voice blend for {median_f0:.0f} Hz {gender} voice…")
+            weights, tensor = find_best_blend(
+                self._kokoro, self._file_path,
+                progress_cb=lambda stage, detail: self.progress.emit(detail),
+            )
+            self.finished.emit({
+                "speed": speed, "depth": depth,
+                "weights": weights, "tensor": tensor,
+                "gender": gender, "median_f0": median_f0,
+            })
         except Exception as e:
             self.error.emit(str(e))
 
@@ -61,33 +73,31 @@ class DropZone(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("dropZone")
         self.setAcceptDrops(True)
         self.setMinimumHeight(50)
-        self.setStyleSheet(
-            "background: #1a1a2a; border: 2px dashed #333; border-radius: 6px;"
-        )
+        self.setProperty("state", "idle")
         self._label = QLabel("Drop audio file to match voice characteristics", self)
         self._label.setAlignment(Qt.AlignCenter)
-        self._label.setStyleSheet("color: #555; border: none;")
+        self._label.setStyleSheet("color: #6b6b80; border: none; background: transparent;")
         layout = QVBoxLayout(self)
         layout.addWidget(self._label)
+
+    def _update_state(self, state):
+        self.setProperty("state", state)
+        self.style().unpolish(self)
+        self.style().polish(self)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
-            self.setStyleSheet(
-                "background: #1a2a1a; border: 2px dashed #5a5; border-radius: 6px;"
-            )
+            self._update_state("drag")
 
     def dragLeaveEvent(self, event):
-        self.setStyleSheet(
-            "background: #1a1a2a; border: 2px dashed #333; border-radius: 6px;"
-        )
+        self._update_state("idle")
 
     def dropEvent(self, event: QDropEvent):
-        self.setStyleSheet(
-            "background: #1a1a2a; border: 2px dashed #333; border-radius: 6px;"
-        )
+        self._update_state("hasfile")
         urls = event.mimeData().urls()
         if urls:
             path = urls[0].toLocalFile()
@@ -102,7 +112,7 @@ class CustomTab(QWidget):
         self._player = player
         self._last_audio: np.ndarray | None = None
         self._last_sr: int = 24000
-        self._save_dir = Path.home() / "Music" / "Whooshy"
+        self._save_dir = Path.home() / "Music" / "Cove Narrator"
         self._worker: HybridSynthWorker | None = None
 
         layout = QVBoxLayout(self)
@@ -118,10 +128,12 @@ class CustomTab(QWidget):
 
         # Phoneme buttons in a scroll area
         phoneme_header = QHBoxLayout()
-        phoneme_header.addWidget(QLabel("PHONEME BUTTONS"))
+        ph_label = QLabel("PHONEME KEYS · ARPABET")
+        ph_label.setObjectName("sectionLabel")
+        phoneme_header.addWidget(ph_label)
         phoneme_header.addStretch()
         hint = QLabel("Click to insert at cursor")
-        hint.setStyleSheet("color: #666; font-size: 10px;")
+        hint.setObjectName("voiceDesc")
         phoneme_header.addWidget(hint)
         layout.addLayout(phoneme_header)
 
@@ -142,9 +154,9 @@ class CustomTab(QWidget):
 
         # Sliders with spinboxes
         slider_layout = QHBoxLayout()
-        self._pitch_slider, self._pitch_spin, pitch_group = self._make_slider("Pitch")
-        self._speed_slider, self._speed_spin, speed_group = self._make_slider("Speed")
-        self._depth_slider, self._depth_spin, depth_group = self._make_slider("Depth")
+        self._pitch_slider, self._pitch_spin, pitch_group = self._make_slider("Pitch", "#7fd0ff")
+        self._speed_slider, self._speed_spin, speed_group = self._make_slider("Speed", "#50e6cf")
+        self._depth_slider, self._depth_spin, depth_group = self._make_slider("Depth", "#c89bff")
         slider_layout.addLayout(pitch_group)
         slider_layout.addLayout(speed_group)
         slider_layout.addLayout(depth_group)
@@ -152,15 +164,18 @@ class CustomTab(QWidget):
 
         # Controls
         controls = QHBoxLayout()
-        self._play_btn = QPushButton("▶ Play")
+        self._play_btn = QPushButton("▶  Play")
+        self._play_btn.setObjectName("playButton")
         self._play_btn.clicked.connect(self._on_play)
         controls.addWidget(self._play_btn)
 
-        self._stop_btn = QPushButton("⏹ Stop")
+        self._stop_btn = QPushButton("⏹  Stop")
+        self._stop_btn.setObjectName("stopButton")
         self._stop_btn.clicked.connect(self._on_stop)
         controls.addWidget(self._stop_btn)
 
-        self._export_btn = QPushButton("⬇ Export WAV")
+        self._export_btn = QPushButton("⬇  Export WAV")
+        self._export_btn.setObjectName("exportButton")
         self._export_btn.clicked.connect(self._on_export)
         controls.addWidget(self._export_btn)
 
@@ -168,6 +183,7 @@ class CustomTab(QWidget):
         layout.addLayout(controls)
 
         self._status = QLabel("")
+        self._status.setObjectName("statusLabel")
         layout.addWidget(self._status)
 
         self._player.state_changed.connect(self._on_playback_state)
@@ -178,11 +194,6 @@ class CustomTab(QWidget):
         outer.setSpacing(4)
 
         max_cols = 15
-        colors = {
-            "vowel": ("background: #2a3a4a; color: #8cf;", "#445"),
-            "consonant": ("background: #3a2a4a; color: #c8f;", "#545"),
-            "pause": ("background: #333; color: #999;", "#555"),
-        }
         groups = [
             ("Vowels", [p for p in PHONEMES if p["category"] == "vowel"]),
             ("Consonants", [p for p in PHONEMES if p["category"] == "consonant"]),
@@ -190,7 +201,7 @@ class CustomTab(QWidget):
 
         for group_name, phonemes in groups:
             header = QLabel(group_name)
-            header.setStyleSheet("color: #888; font-size: 10px; font-weight: bold;")
+            header.setObjectName("vowelLabel" if group_name == "Vowels" else "consonantLabel")
             outer.addWidget(header)
 
             grid_widget = QWidget()
@@ -202,14 +213,10 @@ class CustomTab(QWidget):
             row = 0
             for phoneme in phonemes:
                 cat = phoneme["category"]
-                style_base, border = colors.get(cat, ("background: #333; color: #ccc;", "#555"))
                 btn = QPushButton(phoneme["arpabet"])
                 btn.setToolTip(f'{phoneme["arpabet"]} — "{phoneme["example"]}"')
                 btn.setFixedSize(42, 28)
-                btn.setStyleSheet(
-                    f"{style_base} border: 1px solid {border}; "
-                    f"border-radius: 3px; font-size: 10px; font-weight: bold;"
-                )
+                btn.setProperty("phoneme", cat)
                 arp = phoneme["arpabet"]
                 btn.clicked.connect(lambda checked=False, a=arp: self._insert_phoneme(a))
                 grid.addWidget(btn, row, col)
@@ -240,10 +247,15 @@ class CustomTab(QWidget):
 
         self._text_edit.setFocus()
 
-    def _make_slider(self, name: str) -> tuple[QSlider, QSpinBox, QVBoxLayout]:
+    def _make_slider(self, name: str, color: str = "#50e6cf") -> tuple[QSlider, QSpinBox, QVBoxLayout]:
         group = QVBoxLayout()
         top_row = QHBoxLayout()
+        pip = QLabel("●")
+        pip.setStyleSheet(f"color: {color}; font-size: 6px;")
+        pip.setFixedWidth(10)
+        top_row.addWidget(pip)
         label = QLabel(f"{name}:")
+        label.setObjectName("sliderName")
         spin = QSpinBox()
         spin.setRange(-100, 100)
         spin.setValue(0)
@@ -328,17 +340,28 @@ class CustomTab(QWidget):
             self._play_btn.setText("▶ Play")
 
     def _on_file_dropped(self, file_path: str):
-        self._status.setText(f"Analyzing {Path(file_path).name}...")
-        self._analyze_worker = AnalyzeWorker(file_path)
+        if hasattr(self, '_analyze_worker') and self._analyze_worker is not None:
+            if self._analyze_worker.isRunning():
+                self._status.setText("Analysis already in progress…")
+                return
+        self._status.setText(f"Analyzing {Path(file_path).name}…")
+        kokoro = self._engine._kokoro
+        self._analyze_worker = AnalyzeWorker(file_path, kokoro)
         self._analyze_worker.finished.connect(self._on_analysis_done)
+        self._analyze_worker.progress.connect(lambda msg: self._status.setText(msg))
         self._analyze_worker.error.connect(self._on_analysis_error)
         self._analyze_worker.start()
 
-    def _on_analysis_done(self, pitch: int, speed: int, depth: int):
-        self._pitch_slider.setValue(pitch)
-        self._speed_slider.setValue(speed)
-        self._depth_slider.setValue(depth)
-        self._status.setText("Sliders adjusted to match reference audio.")
+    def _on_analysis_done(self, result: object):
+        self._pitch_slider.setValue(0)
+        self._speed_slider.setValue(result["speed"])
+        self._depth_slider.setValue(result["depth"])
+        main = self.window()
+        if main and hasattr(main, '_set_custom_voice'):
+            main._set_custom_voice(result["tensor"], result["weights"])
+        desc = " + ".join(f"{w:.0%} {v.split('_')[1].title()}"
+                          for v, w in result["weights"].items())
+        self._status.setText(f"Custom voice: {desc}")
 
     def _on_analysis_error(self, msg: str):
         self._status.setText(f"Analysis error: {msg}")

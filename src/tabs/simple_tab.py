@@ -46,7 +46,7 @@ class SimpleTab(QWidget):
         self._dict = Dictionary()
         self._last_audio: np.ndarray | None = None
         self._last_sr: int = 24000
-        self._save_dir = Path.home() / "Music" / "Whooshy"
+        self._save_dir = Path.home() / "Music" / "Cove Narrator"
         self._worker: SynthWorker | None = None
         self._highlighting = False
 
@@ -64,12 +64,9 @@ class SimpleTab(QWidget):
         ]
         for label, insert_text, tooltip in tag_buttons:
             btn = QPushButton(label)
+            btn.setObjectName("tagButton")
             btn.setToolTip(tooltip)
             btn.setFixedHeight(24)
-            btn.setStyleSheet(
-                "font-size: 10px; padding: 2px 6px; "
-                "background: #2a2a3a; border: 1px solid #444; border-radius: 3px; color: #aaa;"
-            )
             btn.clicked.connect(
                 lambda checked=False, t=insert_text: self._insert_tag(t)
             )
@@ -92,9 +89,9 @@ class SimpleTab(QWidget):
 
         # Sliders with spinboxes
         slider_layout = QHBoxLayout()
-        self._pitch_slider, self._pitch_spin, pitch_group = self._make_slider("Pitch")
-        self._speed_slider, self._speed_spin, speed_group = self._make_slider("Speed")
-        self._depth_slider, self._depth_spin, depth_group = self._make_slider("Depth")
+        self._pitch_slider, self._pitch_spin, pitch_group = self._make_slider("Pitch", "#7fd0ff")
+        self._speed_slider, self._speed_spin, speed_group = self._make_slider("Speed", "#50e6cf")
+        self._depth_slider, self._depth_spin, depth_group = self._make_slider("Depth", "#c89bff")
         slider_layout.addLayout(pitch_group)
         slider_layout.addLayout(speed_group)
         slider_layout.addLayout(depth_group)
@@ -102,15 +99,18 @@ class SimpleTab(QWidget):
 
         # Controls
         controls = QHBoxLayout()
-        self._play_btn = QPushButton("▶ Play")
+        self._play_btn = QPushButton("▶  Play")
+        self._play_btn.setObjectName("playButton")
         self._play_btn.clicked.connect(self._on_play)
         controls.addWidget(self._play_btn)
 
-        self._stop_btn = QPushButton("⏹ Stop")
+        self._stop_btn = QPushButton("⏹  Stop")
+        self._stop_btn.setObjectName("stopButton")
         self._stop_btn.clicked.connect(self._on_stop)
         controls.addWidget(self._stop_btn)
 
-        self._export_btn = QPushButton("⬇ Export WAV")
+        self._export_btn = QPushButton("⬇  Export WAV")
+        self._export_btn.setObjectName("exportButton")
         self._export_btn.clicked.connect(self._on_export)
         controls.addWidget(self._export_btn)
 
@@ -118,6 +118,7 @@ class SimpleTab(QWidget):
         layout.addLayout(controls)
 
         self._status = QLabel("")
+        self._status.setObjectName("statusLabel")
         layout.addWidget(self._status)
 
         self._player.state_changed.connect(self._on_playback_state)
@@ -126,10 +127,15 @@ class SimpleTab(QWidget):
         if not self._highlighting:
             self._highlight_timer.start()
 
-    def _make_slider(self, name: str) -> tuple[QSlider, QSpinBox, QVBoxLayout]:
+    def _make_slider(self, name: str, color: str = "#50e6cf") -> tuple[QSlider, QSpinBox, QVBoxLayout]:
         group = QVBoxLayout()
         top_row = QHBoxLayout()
+        pip = QLabel("●")
+        pip.setStyleSheet(f"color: {color}; font-size: 6px;")
+        pip.setFixedWidth(10)
+        top_row.addWidget(pip)
         label = QLabel(f"{name}:")
+        label.setObjectName("sliderName")
         spin = QSpinBox()
         spin.setRange(-100, 100)
         spin.setValue(0)
@@ -175,8 +181,8 @@ class SimpleTab(QWidget):
             cursor.clearSelection()
 
             flagged_fmt = QTextCharFormat()
-            flagged_fmt.setBackground(QColor(85, 51, 51))
-            flagged_fmt.setForeground(QColor(255, 153, 153))
+            flagged_fmt.setBackground(QColor(255, 107, 107, 41))
+            flagged_fmt.setForeground(QColor(255, 107, 107))
 
             pos = 0
             for word, _, is_known in self._dict.lookup_with_flags(text):

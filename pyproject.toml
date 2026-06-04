@@ -1,6 +1,6 @@
 [project]
-name = "whooshy"
-version = "0.1.0"
+name = "cove-narrator"
+version = "1.0.0"
 description = "Offline TTS desktop app with phoneme-level voice building"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-whooshy = "src.main:main"
+cove-narrator = "src.main:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

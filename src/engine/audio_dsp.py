@@ -26,7 +26,7 @@ def apply_pitch_shift(audio: np.ndarray, slider: int, sr: int) -> np.ndarray:
         padded = np.zeros(len(audio), dtype=np.float32)
         padded[:len(shifted)] = shifted
         return padded
-    return shifted[:len(audio)]
+    return shifted
 
 
 def apply_depth(audio: np.ndarray, slider: int) -> np.ndarray:

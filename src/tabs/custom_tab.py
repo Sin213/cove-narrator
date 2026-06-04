@@ -1,34 +1,38 @@
 from pathlib import Path
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout,
-    QSlider, QLabel, QScrollArea, QFileDialog, QFrame,
+    QSlider, QLabel, QScrollArea, QFileDialog, QFrame, QSpinBox,
+    QTextEdit,
 )
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QTextCursor
+
 import numpy as np
+
 from src.engine.tts import TTSEngine
 from src.engine.audio_dsp import apply_all, slider_to_speed
-from src.data.phonemes import PHONEMES, arpabet_sequence_to_ipa, PAUSE_TOKEN
+from src.data.phonemes import PHONEMES, PAUSE_TOKEN
 from src.utils.audio_player import AudioPlayer
 from src.utils.export import export_wav
 from src.utils.presets import Preset
 
 
-class PhonemeWorker(QThread):
+class HybridSynthWorker(QThread):
     finished = Signal(np.ndarray, int)
     error = Signal(str)
 
-    def __init__(self, engine, ipa_text, voice, speed):
+    def __init__(self, engine, text, voice, speed):
         super().__init__()
         self._engine = engine
-        self._ipa_text = ipa_text
+        self._text = text
         self._voice = voice
         self._speed = speed
 
     def run(self):
         try:
-            audio, sr = self._engine.synthesize_phonemes(
-                self._ipa_text, voice=self._voice, speed=self._speed
+            audio, sr = self._engine.synthesize_hybrid(
+                self._text, voice=self._voice, speed=self._speed
             )
             self.finished.emit(audio, sr)
         except Exception as e:
@@ -52,29 +56,17 @@ class AnalyzeWorker(QThread):
             self.error.emit(str(e))
 
 
-class PhonemeTag(QPushButton):
-    def __init__(self, arpabet: str, index: int, parent=None):
-        super().__init__(arpabet, parent)
-        self.arpabet = arpabet
-        self.index = index
-        self.setFixedHeight(26)
-        self.setStyleSheet(
-            "background: #2a3a4a; color: #8cf; border: 1px solid #445; "
-            "border-radius: 3px; padding: 2px 6px; font-size: 11px;"
-        )
-
-
 class DropZone(QFrame):
     file_dropped = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
-        self.setMinimumHeight(60)
+        self.setMinimumHeight(50)
         self.setStyleSheet(
             "background: #1a1a2a; border: 2px dashed #333; border-radius: 6px;"
         )
-        self._label = QLabel("🎵 Drop audio file to match voice characteristics", self)
+        self._label = QLabel("Drop audio file to match voice characteristics", self)
         self._label.setAlignment(Qt.AlignCenter)
         self._label.setStyleSheet("color: #555; border: none;")
         layout = QVBoxLayout(self)
@@ -99,7 +91,7 @@ class DropZone(QFrame):
         urls = event.mimeData().urls()
         if urls:
             path = urls[0].toLocalFile()
-            self._label.setText(f"🎵 {Path(path).name}")
+            self._label.setText(f"{Path(path).name}")
             self.file_dropped.emit(path)
 
 
@@ -108,50 +100,51 @@ class CustomTab(QWidget):
         super().__init__(parent)
         self._engine = engine
         self._player = player
-        self._sequence: list[str] = []
         self._last_audio: np.ndarray | None = None
         self._last_sr: int = 24000
         self._save_dir = Path.home() / "Music" / "Whooshy"
-        self._worker: PhonemeWorker | None = None
+        self._worker: HybridSynthWorker | None = None
 
         layout = QVBoxLayout(self)
 
-        # Phoneme buttons
-        layout.addWidget(QLabel("PHONEME BUTTONS"))
+        # Text area for hybrid input
+        self._text_edit = QTextEdit()
+        self._text_edit.setPlaceholderText(
+            'Type text here. Click phoneme buttons below to insert pronunciation.\n'
+            'Example: my cat {F EH L IY AH S} is very frantic at the vet'
+        )
+        self._text_edit.setMaximumHeight(100)
+        layout.addWidget(self._text_edit)
+
+        # Phoneme buttons in a scroll area
+        phoneme_header = QHBoxLayout()
+        phoneme_header.addWidget(QLabel("PHONEME BUTTONS"))
+        phoneme_header.addStretch()
+        hint = QLabel("Click to insert at cursor")
+        hint.setStyleSheet("color: #666; font-size: 10px;")
+        phoneme_header.addWidget(hint)
+        layout.addLayout(phoneme_header)
+
+        phoneme_scroll = QScrollArea()
+        phoneme_scroll.setWidgetResizable(True)
+        phoneme_scroll.setMinimumHeight(100)
+        phoneme_scroll.setMaximumHeight(170)
+        phoneme_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         btn_widget = QWidget()
         self._build_phoneme_grid(btn_widget)
-        layout.addWidget(btn_widget)
-
-        # Sequence bar
-        layout.addWidget(QLabel("PHONEME SEQUENCE"))
-        self._seq_scroll = QScrollArea()
-        self._seq_scroll.setWidgetResizable(True)
-        self._seq_scroll.setFixedHeight(50)
-        self._seq_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self._seq_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._seq_widget = QWidget()
-        self._seq_layout = QHBoxLayout(self._seq_widget)
-        self._seq_layout.setContentsMargins(4, 4, 4, 4)
-        self._seq_layout.setSpacing(3)
-        self._seq_layout.addStretch()
-        self._seq_scroll.setWidget(self._seq_widget)
-        layout.addWidget(self._seq_scroll)
-
-        clear_btn = QPushButton("Clear All")
-        clear_btn.clicked.connect(self._clear_sequence)
-        layout.addWidget(clear_btn)
+        phoneme_scroll.setWidget(btn_widget)
+        layout.addWidget(phoneme_scroll)
 
         # Reference audio drop zone
-        layout.addWidget(QLabel("REFERENCE AUDIO"))
         self._drop_zone = DropZone()
         self._drop_zone.file_dropped.connect(self._on_file_dropped)
         layout.addWidget(self._drop_zone)
 
-        # Sliders
+        # Sliders with spinboxes
         slider_layout = QHBoxLayout()
-        self._pitch_slider, pitch_group = self._make_slider("Pitch")
-        self._speed_slider, speed_group = self._make_slider("Speed")
-        self._depth_slider, depth_group = self._make_slider("Depth")
+        self._pitch_slider, self._pitch_spin, pitch_group = self._make_slider("Pitch")
+        self._speed_slider, self._speed_spin, speed_group = self._make_slider("Speed")
+        self._depth_slider, self._depth_spin, depth_group = self._make_slider("Depth")
         slider_layout.addLayout(pitch_group)
         slider_layout.addLayout(speed_group)
         slider_layout.addLayout(depth_group)
@@ -172,10 +165,6 @@ class CustomTab(QWidget):
         controls.addWidget(self._export_btn)
 
         controls.addStretch()
-        self._dir_label = QPushButton(f"📁 {self._save_dir}")
-        self._dir_label.setFlat(True)
-        self._dir_label.clicked.connect(self._choose_dir)
-        controls.addWidget(self._dir_label)
         layout.addLayout(controls)
 
         self._status = QLabel("")
@@ -184,71 +173,92 @@ class CustomTab(QWidget):
         self._player.state_changed.connect(self._on_playback_state)
 
     def _build_phoneme_grid(self, parent):
-        grid = QGridLayout(parent)
-        grid.setSpacing(3)
+        outer = QVBoxLayout(parent)
+        outer.setContentsMargins(4, 4, 4, 4)
+        outer.setSpacing(4)
 
-        col = 0
-        row = 0
-        max_cols = 12
+        max_cols = 15
         colors = {
             "vowel": ("background: #2a3a4a; color: #8cf;", "#445"),
             "consonant": ("background: #3a2a4a; color: #c8f;", "#545"),
             "pause": ("background: #333; color: #999;", "#555"),
         }
+        groups = [
+            ("Vowels", [p for p in PHONEMES if p["category"] == "vowel"]),
+            ("Consonants", [p for p in PHONEMES if p["category"] == "consonant"]),
+        ]
 
-        for phoneme in PHONEMES:
-            cat = phoneme["category"]
-            style_base, border = colors.get(cat, ("background: #333; color: #ccc;", "#555"))
-            btn = QPushButton(phoneme["arpabet"])
-            btn.setToolTip(phoneme["example"])
-            btn.setFixedSize(42, 28)
-            btn.setStyleSheet(
-                f"{style_base} border: 1px solid {border}; "
-                f"border-radius: 3px; font-size: 10px; font-weight: bold;"
-            )
-            arp = phoneme["arpabet"]
-            btn.clicked.connect(lambda checked=False, a=arp: self._add_phoneme(a))
-            grid.addWidget(btn, row, col)
-            col += 1
-            if col >= max_cols:
-                col = 0
-                row += 1
+        for group_name, phonemes in groups:
+            header = QLabel(group_name)
+            header.setStyleSheet("color: #888; font-size: 10px; font-weight: bold;")
+            outer.addWidget(header)
 
-    def _add_phoneme(self, arpabet: str):
-        self._sequence.append(arpabet)
-        self._rebuild_sequence_bar()
+            grid_widget = QWidget()
+            grid = QGridLayout(grid_widget)
+            grid.setSpacing(3)
+            grid.setContentsMargins(0, 0, 0, 0)
 
-    def _remove_phoneme(self, index: int):
-        if 0 <= index < len(self._sequence):
-            self._sequence.pop(index)
-            self._rebuild_sequence_bar()
+            col = 0
+            row = 0
+            for phoneme in phonemes:
+                cat = phoneme["category"]
+                style_base, border = colors.get(cat, ("background: #333; color: #ccc;", "#555"))
+                btn = QPushButton(phoneme["arpabet"])
+                btn.setToolTip(f'{phoneme["arpabet"]} — "{phoneme["example"]}"')
+                btn.setFixedSize(42, 28)
+                btn.setStyleSheet(
+                    f"{style_base} border: 1px solid {border}; "
+                    f"border-radius: 3px; font-size: 10px; font-weight: bold;"
+                )
+                arp = phoneme["arpabet"]
+                btn.clicked.connect(lambda checked=False, a=arp: self._insert_phoneme(a))
+                grid.addWidget(btn, row, col)
+                col += 1
+                if col >= max_cols:
+                    col = 0
+                    row += 1
 
-    def _clear_sequence(self):
-        self._sequence.clear()
-        self._rebuild_sequence_bar()
+            outer.addWidget(grid_widget)
+        outer.addStretch()
 
-    def _rebuild_sequence_bar(self):
-        while self._seq_layout.count() > 0:
-            item = self._seq_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+    def _insert_phoneme(self, arpabet: str):
+        cursor = self._text_edit.textCursor()
+        pos = cursor.position()
+        text = self._text_edit.toPlainText()
 
-        for i, arp in enumerate(self._sequence):
-            tag = PhonemeTag(arp, i)
-            tag.clicked.connect(lambda checked=False, idx=i: self._remove_phoneme(idx))
-            self._seq_layout.addWidget(tag)
-        self._seq_layout.addStretch()
+        brace_open = text.rfind("{", 0, pos)
+        brace_close = text.rfind("}", 0, pos)
+        inside_block = brace_open > brace_close
 
-    def _make_slider(self, name: str) -> tuple[QSlider, QVBoxLayout]:
+        if inside_block:
+            cursor.insertText(f" {arpabet}")
+        elif pos > 0 and text[pos - 1:pos] == "}":
+            cursor.setPosition(pos - 1)
+            cursor.insertText(f" {arpabet}")
+        else:
+            cursor.insertText(f"{{{arpabet}}}")
+
+        self._text_edit.setFocus()
+
+    def _make_slider(self, name: str) -> tuple[QSlider, QSpinBox, QVBoxLayout]:
         group = QVBoxLayout()
-        label = QLabel(f"{name}: 0")
+        top_row = QHBoxLayout()
+        label = QLabel(f"{name}:")
+        spin = QSpinBox()
+        spin.setRange(-100, 100)
+        spin.setValue(0)
+        spin.setFixedWidth(55)
+        top_row.addWidget(label)
+        top_row.addWidget(spin)
+        group.addLayout(top_row)
+
         slider = QSlider(Qt.Horizontal)
         slider.setRange(-100, 100)
         slider.setValue(0)
-        slider.valueChanged.connect(lambda v, lbl=label, n=name: lbl.setText(f"{n}: {v}"))
-        group.addWidget(label)
+        slider.valueChanged.connect(spin.setValue)
+        spin.valueChanged.connect(slider.setValue)
         group.addWidget(slider)
-        return slider, group
+        return slider, spin, group
 
     def get_slider_values(self) -> dict[str, int]:
         return {
@@ -256,6 +266,9 @@ class CustomTab(QWidget):
             "speed": self._speed_slider.value(),
             "depth": self._depth_slider.value(),
         }
+
+    def set_save_dir(self, path: Path):
+        self._save_dir = path
 
     def apply_preset(self, preset: Preset):
         self._pitch_slider.setValue(preset.pitch)
@@ -266,18 +279,22 @@ class CustomTab(QWidget):
         if self._player.is_paused:
             self._player.play()
             return
-        if not self._sequence:
-            self._status.setText("No phonemes in sequence.")
+        text = self._text_edit.toPlainText().strip()
+        if not text:
+            self._status.setText("No text to speak.")
             return
-        ipa_text = arpabet_sequence_to_ipa(self._sequence)
-        if not ipa_text.strip():
-            self._status.setText("Could not convert phonemes to IPA.")
-            return
+        self._player.stop()
         self._status.setText("Synthesizing...")
         self._play_btn.setEnabled(False)
         speed = slider_to_speed(self._speed_slider.value())
         voice = self.window().get_current_voice_id()
-        self._worker = PhonemeWorker(self._engine, ipa_text, voice, speed)
+        if self._worker is not None:
+            try:
+                self._worker.finished.disconnect()
+                self._worker.error.disconnect()
+            except RuntimeError:
+                pass
+        self._worker = HybridSynthWorker(self._engine, text, voice, speed)
         self._worker.finished.connect(self._on_synth_done)
         self._worker.error.connect(self._on_synth_error)
         self._worker.start()
@@ -299,6 +316,8 @@ class CustomTab(QWidget):
 
     def _on_stop(self):
         self._player.stop()
+        self._play_btn.setEnabled(True)
+        self._status.setText("")
 
     def _on_playback_state(self, state: str):
         if state == "playing":
@@ -331,8 +350,10 @@ class CustomTab(QWidget):
         path = export_wav(self._last_audio, self._last_sr, self._save_dir)
         self._status.setText(f"Exported: {path.name}")
 
-    def _choose_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Save Directory", str(self._save_dir))
-        if d:
-            self._save_dir = Path(d)
-            self._dir_label.setText(f"📁 {self._save_dir}")
+    def toggle_play_pause(self):
+        if self._player.is_playing:
+            self._player.pause()
+        elif self._player.is_paused:
+            self._player.play()
+        else:
+            self._on_play()

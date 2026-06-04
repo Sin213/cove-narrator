@@ -1,17 +1,21 @@
 from pathlib import Path
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
-    QPushButton, QSlider, QLabel, QFileDialog,
+    QPushButton, QSlider, QLabel, QSpinBox,
 )
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QTextCharFormat, QColor, QTextCursor
+
 import numpy as np
-from src.engine.tts import TTSEngine
+
+from src.engine.tts import TTSEngine, TAGS_HELP
 from src.engine.audio_dsp import apply_all, slider_to_speed
 from src.data.dictionary import Dictionary
 from src.utils.audio_player import AudioPlayer
 from src.utils.export import export_wav
 from src.utils.presets import Preset
+
 
 class SynthWorker(QThread):
     finished = Signal(np.ndarray, int)
@@ -26,10 +30,13 @@ class SynthWorker(QThread):
 
     def run(self):
         try:
-            audio, sr = self._engine.synthesize_text(self._text, voice=self._voice, speed=self._speed)
+            audio, sr = self._engine.synthesize_text(
+                self._text, voice=self._voice, speed=self._speed
+            )
             self.finished.emit(audio, sr)
         except Exception as e:
             self.error.emit(str(e))
+
 
 class SimpleTab(QWidget):
     def __init__(self, engine: TTSEngine, player: AudioPlayer, parent=None):
@@ -41,13 +48,40 @@ class SimpleTab(QWidget):
         self._last_sr: int = 24000
         self._save_dir = Path.home() / "Music" / "Whooshy"
         self._worker: SynthWorker | None = None
-        self._highlighting = False  # guard flag to prevent infinite loop
+        self._highlighting = False
 
         layout = QVBoxLayout(self)
 
+        # Tag insertion toolbar
+        tag_row = QHBoxLayout()
+        tag_row.addWidget(QLabel("Insert:"))
+        tag_buttons = [
+            ("[Pause]", "[Pause] ", "Insert a 0.5s silence. Use [Pause 1.5] for custom duration."),
+            ("[Speed]", "[Speed 1.5] ", "Change speed for next segment. 0.5=slow, 2.0=fast. [Speed] resets."),
+            ("[Pitch]", "[Pitch 30] ", "Shift pitch for next segment. -100 to 100. [Pitch] resets."),
+            ("[Soft]", "[Soft] ", "Quieter next segment (~40% volume)."),
+            ("[Slow]", "[Slow] ", "Slow down next segment (0.7x speed, more deliberate)."),
+        ]
+        for label, insert_text, tooltip in tag_buttons:
+            btn = QPushButton(label)
+            btn.setToolTip(tooltip)
+            btn.setFixedHeight(24)
+            btn.setStyleSheet(
+                "font-size: 10px; padding: 2px 6px; "
+                "background: #2a2a3a; border: 1px solid #444; border-radius: 3px; color: #aaa;"
+            )
+            btn.clicked.connect(
+                lambda checked=False, t=insert_text: self._insert_tag(t)
+            )
+            tag_row.addWidget(btn)
+        tag_row.addStretch()
+        layout.addLayout(tag_row)
+
         # Text area
         self._text_edit = QTextEdit()
-        self._text_edit.setPlaceholderText("Type or paste text here...")
+        self._text_edit.setPlaceholderText(
+            'Type or paste text here...\nUse the buttons above to insert tags like [Pause], [Whisper], etc.'
+        )
         layout.addWidget(self._text_edit)
 
         self._highlight_timer = QTimer()
@@ -56,11 +90,11 @@ class SimpleTab(QWidget):
         self._highlight_timer.timeout.connect(self._highlight_unknown_words)
         self._text_edit.textChanged.connect(self._on_text_changed)
 
-        # Sliders
+        # Sliders with spinboxes
         slider_layout = QHBoxLayout()
-        self._pitch_slider, pitch_group = self._make_slider("Pitch")
-        self._speed_slider, speed_group = self._make_slider("Speed")
-        self._depth_slider, depth_group = self._make_slider("Depth")
+        self._pitch_slider, self._pitch_spin, pitch_group = self._make_slider("Pitch")
+        self._speed_slider, self._speed_spin, speed_group = self._make_slider("Speed")
+        self._depth_slider, self._depth_spin, depth_group = self._make_slider("Depth")
         slider_layout.addLayout(pitch_group)
         slider_layout.addLayout(speed_group)
         slider_layout.addLayout(depth_group)
@@ -81,10 +115,6 @@ class SimpleTab(QWidget):
         controls.addWidget(self._export_btn)
 
         controls.addStretch()
-        self._dir_label = QPushButton(f"📁 {self._save_dir}")
-        self._dir_label.setFlat(True)
-        self._dir_label.clicked.connect(self._choose_dir)
-        controls.addWidget(self._dir_label)
         layout.addLayout(controls)
 
         self._status = QLabel("")
@@ -93,23 +123,38 @@ class SimpleTab(QWidget):
         self._player.state_changed.connect(self._on_playback_state)
 
     def _on_text_changed(self):
-        """Only restart highlight timer if we are not currently highlighting."""
         if not self._highlighting:
             self._highlight_timer.start()
 
-    def _make_slider(self, name: str) -> tuple[QSlider, QVBoxLayout]:
+    def _make_slider(self, name: str) -> tuple[QSlider, QSpinBox, QVBoxLayout]:
         group = QVBoxLayout()
-        label = QLabel(f"{name}: 0")
+        top_row = QHBoxLayout()
+        label = QLabel(f"{name}:")
+        spin = QSpinBox()
+        spin.setRange(-100, 100)
+        spin.setValue(0)
+        spin.setFixedWidth(55)
+        top_row.addWidget(label)
+        top_row.addWidget(spin)
+        group.addLayout(top_row)
+
         slider = QSlider(Qt.Horizontal)
         slider.setRange(-100, 100)
         slider.setValue(0)
-        slider.valueChanged.connect(lambda v, lbl=label, n=name: lbl.setText(f"{n}: {v}"))
-        group.addWidget(label)
+        slider.valueChanged.connect(spin.setValue)
+        spin.valueChanged.connect(slider.setValue)
         group.addWidget(slider)
-        return slider, group
+        return slider, spin, group
 
     def get_slider_values(self) -> dict[str, int]:
-        return {"pitch": self._pitch_slider.value(), "speed": self._speed_slider.value(), "depth": self._depth_slider.value()}
+        return {
+            "pitch": self._pitch_slider.value(),
+            "speed": self._speed_slider.value(),
+            "depth": self._depth_slider.value(),
+        }
+
+    def set_save_dir(self, path: Path):
+        self._save_dir = path
 
     def apply_preset(self, preset: Preset):
         self._pitch_slider.setValue(preset.pitch)
@@ -120,7 +165,7 @@ class SimpleTab(QWidget):
         text = self._text_edit.toPlainText()
         if not text.strip():
             return
-        self._highlighting = True  # prevent textChanged re-trigger
+        self._highlighting = True
         try:
             cursor = self._text_edit.textCursor()
             cursor.beginEditBlock()
@@ -145,7 +190,7 @@ class SimpleTab(QWidget):
                 pos = idx + len(word)
             cursor.endEditBlock()
         finally:
-            self._highlighting = False  # always re-enable
+            self._highlighting = False
 
     def _on_play(self):
         if self._player.is_paused:
@@ -155,10 +200,17 @@ class SimpleTab(QWidget):
         if not text:
             self._status.setText("No text to speak.")
             return
+        self._player.stop()
         self._status.setText("Synthesizing...")
         self._play_btn.setEnabled(False)
         speed = slider_to_speed(self._speed_slider.value())
         voice = self.window().get_current_voice_id()
+        if self._worker is not None:
+            try:
+                self._worker.finished.disconnect()
+                self._worker.error.disconnect()
+            except RuntimeError:
+                pass
         self._worker = SynthWorker(self._engine, text, voice, speed)
         self._worker.finished.connect(self._on_synth_done)
         self._worker.error.connect(self._on_synth_error)
@@ -181,6 +233,8 @@ class SimpleTab(QWidget):
 
     def _on_stop(self):
         self._player.stop()
+        self._play_btn.setEnabled(True)
+        self._status.setText("")
 
     def _on_playback_state(self, state: str):
         if state == "playing":
@@ -197,8 +251,15 @@ class SimpleTab(QWidget):
         path = export_wav(self._last_audio, self._last_sr, self._save_dir)
         self._status.setText(f"Exported: {path.name}")
 
-    def _choose_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Save Directory", str(self._save_dir))
-        if d:
-            self._save_dir = Path(d)
-            self._dir_label.setText(f"📁 {self._save_dir}")
+    def _insert_tag(self, tag_text: str):
+        cursor = self._text_edit.textCursor()
+        cursor.insertText(tag_text)
+        self._text_edit.setFocus()
+
+    def toggle_play_pause(self):
+        if self._player.is_playing:
+            self._player.pause()
+        elif self._player.is_paused:
+            self._player.play()
+        else:
+            self._on_play()

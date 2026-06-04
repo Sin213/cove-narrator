@@ -35,8 +35,19 @@ python -m venv .buildenv
 & .\.buildenv\Scripts\python.exe -m pip install --quiet `
     -r requirements.txt pyinstaller Pillow
 
-# --- 2. Generate .ico ---
-Step "[2/6] Generating icon"
+# --- 2. Download model files if missing ---
+Step "[2/8] Downloading model files"
+$modelsDir = "data\models"
+if (-not (Test-Path $modelsDir)) { New-Item -ItemType Directory -Path $modelsDir -Force | Out-Null }
+if (-not (Test-Path "$modelsDir\kokoro-v1.0.onnx")) {
+    Download-File "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx" "$modelsDir\kokoro-v1.0.onnx"
+}
+if (-not (Test-Path "$modelsDir\voices-v1.0.bin")) {
+    Download-File "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin" "$modelsDir\voices-v1.0.bin"
+}
+
+# --- 3. Generate .ico ---
+Step "[3/8] Generating icon"
 & .\.buildenv\Scripts\python.exe -c @"
 from PIL import Image
 Image.open('build/icon.png').save(
@@ -46,7 +57,7 @@ Image.open('build/icon.png').save(
 "@
 
 # --- 3. PyInstaller one-dir (installer input) ---
-Step "[3/6] PyInstaller (one-dir for installer)"
+Step "[4/8] PyInstaller (one-dir for installer)"
 if (Test-Path build\tmp) { Remove-Item -Recurse -Force build\tmp }
 if (Test-Path dist)      { Remove-Item -Recurse -Force dist }
 
@@ -88,7 +99,7 @@ if (Test-Path README.md) { Copy-Item README.md $dirAppDir -Force }
 if (Test-Path LICENSE)   { Copy-Item LICENSE   $dirAppDir -Force }
 
 # --- 4. PyInstaller one-file (portable) ---
-Step "[4/6] PyInstaller (one-file portable)"
+Step "[5/8] PyInstaller (one-file portable)"
 $portableName = "$App-portable"
 & .\.buildenv\Scripts\pyinstaller.exe `
     --noconfirm --clean --log-level WARN `
@@ -120,7 +131,7 @@ $portableName = "$App-portable"
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (onefile) failed" }
 
 # --- 5. Build installer + stage portable ---
-Step "[5/6] Building Setup installer with Inno Setup"
+Step "[6/8] Building Setup installer with Inno Setup"
 New-Item -ItemType Directory -Path $ReleaseDir -Force | Out-Null
 
 $iscc = $null
@@ -162,14 +173,14 @@ function Write-Sha256Sidecar([string]$file) {
     "$hash  $name" | Set-Content -Path "$file.sha256" -NoNewline -Encoding ascii
 }
 
-Step "Writing sha256 sidecars"
+Step "[7/8] Writing sha256 sidecars"
 Get-ChildItem -Path $ReleaseDir -Filter "*$Version*.exe" | ForEach-Object {
     Write-Sha256Sidecar $_.FullName
     Write-Host ("  -> {0}.sha256" -f $_.Name)
 }
 
 # --- 6. Cleanup ---
-Step "[6/6] Cleaning up"
+Step "[8/8] Cleaning up"
 Remove-Item -Recurse -Force .buildenv, build\tmp, dist, build\icon.ico -ErrorAction SilentlyContinue
 Get-ChildItem -Filter *.spec | Remove-Item -Force -ErrorAction SilentlyContinue
 

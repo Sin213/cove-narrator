@@ -34,7 +34,25 @@ python3 -m venv "$BUILD_ENV"
 "$BUILD_ENV/bin/pip" install --quiet -r requirements.txt pyinstaller
 
 # ----------------------------------------------------------------------
-# 1. PyInstaller
+# 1. Download model files if missing
+# ----------------------------------------------------------------------
+MODELS_DIR="$ROOT/data/models"
+mkdir -p "$MODELS_DIR"
+if [ ! -f "$MODELS_DIR/kokoro-v1.0.onnx" ]; then
+    echo "==> Downloading kokoro-v1.0.onnx"
+    curl -fL --retry 3 --silent --show-error \
+        -o "$MODELS_DIR/kokoro-v1.0.onnx" \
+        "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
+fi
+if [ ! -f "$MODELS_DIR/voices-v1.0.bin" ]; then
+    echo "==> Downloading voices-v1.0.bin"
+    curl -fL --retry 3 --silent --show-error \
+        -o "$MODELS_DIR/voices-v1.0.bin" \
+        "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
+fi
+
+# ----------------------------------------------------------------------
+# 2. PyInstaller
 # ----------------------------------------------------------------------
 echo "==> Running PyInstaller"
 "$BUILD_ENV/bin/pyinstaller" \
@@ -68,7 +86,7 @@ BUNDLE="$DIST_DIR/$APP_NAME"
 [ -d "$BUNDLE" ] || { echo "PyInstaller bundle not found at $BUNDLE"; exit 1; }
 
 # ----------------------------------------------------------------------
-# 2. AppImage
+# 3. AppImage
 # ----------------------------------------------------------------------
 echo "==> Assembling AppDir"
 rm -rf "$APPDIR"
@@ -137,7 +155,7 @@ echo "    -> $APPIMAGE_OUT"
 echo "    -> $APPIMAGE_OUT.sha256"
 
 # ----------------------------------------------------------------------
-# 3. .deb (manual: ar + tar.xz, no dpkg-deb dependency)
+# 4. .deb (manual: ar + tar.xz, no dpkg-deb dependency)
 # ----------------------------------------------------------------------
 if [ "${SKIP_DEB:-0}" = "1" ]; then
     echo "==> Skipping .deb (SKIP_DEB=1)"

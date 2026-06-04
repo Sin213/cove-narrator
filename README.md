@@ -1,5 +1,7 @@
 # Cove Narrator
 
+![Cove Narrator](docs/cove-narator.png)
+
 Fully offline text-to-speech desktop app with voice blending, phoneme-level pronunciation control, and document reading. Built on [Kokoro ONNX](https://github.com/thewh1teagle/kokoro-onnx) — all processing runs locally on your machine. No accounts, no API keys, no network required after setup.
 
 Cross-platform: **Linux** and **Windows**. Same codebase, same features on both.

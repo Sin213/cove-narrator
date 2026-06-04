@@ -62,6 +62,8 @@ echo "==> Running PyInstaller"
     --paths . \
     --collect-submodules src \
     --collect-data kokoro_onnx \
+    --collect-data phonemizer \
+    --collect-data language_tags \
     --add-data "data/models/kokoro-v1.0.onnx:data/models" \
     --add-data "data/models/voices-v1.0.bin:data/models" \
     --add-data "data/cmudict.txt:data" \

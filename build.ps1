@@ -66,7 +66,8 @@ $commonArgs = @(
     '--windowed',
     '--name', $App,
     '--icon', 'build\icon.ico',
-    '--paths', 'src',
+    '--paths', '.',
+    '--collect-submodules', 'src',
     '--add-data', ("data\models\kokoro-v1.0.onnx" + [IO.Path]::PathSeparator + "data\models"),
     '--add-data', ("data\models\voices-v1.0.bin" + [IO.Path]::PathSeparator + "data\models"),
     '--add-data', ("data\cmudict.txt" + [IO.Path]::PathSeparator + "data"),
@@ -106,7 +107,8 @@ $portableName = "$App-portable"
     --onefile --windowed `
     --name $portableName `
     --icon build\icon.ico `
-    --paths src `
+    --paths . `
+    --collect-submodules src `
     --add-data ("data\models\kokoro-v1.0.onnx" + [IO.Path]::PathSeparator + "data\models") `
     --add-data ("data\models\voices-v1.0.bin" + [IO.Path]::PathSeparator + "data\models") `
     --add-data ("data\cmudict.txt" + [IO.Path]::PathSeparator + "data") `

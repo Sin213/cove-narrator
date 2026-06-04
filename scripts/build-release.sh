@@ -59,7 +59,8 @@ echo "==> Running PyInstaller"
     --noconfirm --clean --log-level WARN \
     --windowed \
     --name "$APP_NAME" \
-    --paths src \
+    --paths . \
+    --collect-submodules src \
     --add-data "data/models/kokoro-v1.0.onnx:data/models" \
     --add-data "data/models/voices-v1.0.bin:data/models" \
     --add-data "data/cmudict.txt:data" \

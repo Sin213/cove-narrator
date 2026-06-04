@@ -257,6 +257,9 @@ class ReaderTab(QWidget):
             return
         self._is_reading = True
         self._full_audio_parts = []
+        self._next_audio = None
+        self._next_sr = 24000
+        self._prefetch_worker: ChunkWorker | None = None
         self._synthesize_current()
 
     def _synthesize_current(self):
@@ -264,7 +267,6 @@ class ReaderTab(QWidget):
             self._finish_reading()
             return
 
-        sentence = self._sentences[self._current_idx]
         self._highlight_sentence(self._current_idx)
         self._progress.setValue(self._current_idx + 1)
 
@@ -274,8 +276,14 @@ class ReaderTab(QWidget):
         mins = int(est_seconds // 60)
         secs = int(est_seconds % 60)
         self._time_label.setText(f"~{mins}m {secs}s remaining")
-
         self._status.setText(f"Reading sentence {self._current_idx + 1}/{len(self._sentences)}...")
+
+        if self._next_audio is not None:
+            self._play_and_prefetch(self._next_audio, self._next_sr)
+            self._next_audio = None
+            return
+
+        sentence = self._sentences[self._current_idx]
         voice = self.window().get_current_voice_id()
         speed = slider_to_speed(self._speed_slider.value())
         pitch = self._pitch_slider.value()
@@ -292,11 +300,33 @@ class ReaderTab(QWidget):
         self._worker.error.connect(self._on_chunk_synth_error)
         self._worker.start()
 
-    def _on_chunk_synth_done(self, audio: np.ndarray, sr: int):
+    def _play_and_prefetch(self, audio: np.ndarray, sr: int):
         self._full_audio_parts.append(audio)
         self._last_sr = sr
         self._player.load(audio, sr)
         self._player.play()
+        self._prefetch_next()
+
+    def _prefetch_next(self):
+        next_idx = self._current_idx + 1
+        if next_idx >= len(self._sentences):
+            return
+        voice = self.window().get_current_voice_id()
+        speed = slider_to_speed(self._speed_slider.value())
+        pitch = self._pitch_slider.value()
+        depth = self._depth_slider.value()
+        sentence = self._sentences[next_idx]
+        self._prefetch_worker = ChunkWorker(self._engine, sentence, voice, speed, pitch, depth)
+        self._prefetch_worker.finished.connect(self._on_prefetch_done)
+        self._prefetch_worker.error.connect(lambda _: None)
+        self._prefetch_worker.start()
+
+    def _on_prefetch_done(self, audio: np.ndarray, sr: int):
+        self._next_audio = audio
+        self._next_sr = sr
+
+    def _on_chunk_synth_done(self, audio: np.ndarray, sr: int):
+        self._play_and_prefetch(audio, sr)
 
     def _on_chunk_synth_error(self, msg: str):
         self._status.setText(f"Error: {msg}")
@@ -310,7 +340,7 @@ class ReaderTab(QWidget):
             self._finish_reading()
         else:
             self._current_idx += 1
-            QTimer.singleShot(50, self._synthesize_current)
+            self._synthesize_current()
 
     def _finish_reading(self):
         self._is_reading = False

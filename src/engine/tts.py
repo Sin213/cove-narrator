@@ -20,26 +20,34 @@ TAGS_HELP = [
 ]
 
 
-_SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?;])\s+|(?<=,)\s+')
-_MAX_CHUNK_WORDS = 25
+_SENTENCE_RE = re.compile(r'(?<=[.!?;])\s+')
+_CLAUSE_RE = re.compile(r'(?<=,)\s+')
+_MAX_CHUNK_WORDS = 50
 
 
 def _split_sentences(text: str) -> list[str]:
-    """Split text into sentence-sized chunks so kokoro doesn't truncate."""
-    parts = _SENTENCE_SPLIT_RE.split(text)
+    """Split text into chunks kokoro can handle without truncation."""
+    parts = _SENTENCE_RE.split(text)
     result = []
     for p in parts:
         p = p.strip()
         if not p:
             continue
-        words = p.split()
-        if len(words) <= _MAX_CHUNK_WORDS:
+        if len(p.split()) <= _MAX_CHUNK_WORDS:
             result.append(p)
         else:
-            for i in range(0, len(words), _MAX_CHUNK_WORDS):
-                chunk = " ".join(words[i:i + _MAX_CHUNK_WORDS])
-                if chunk:
-                    result.append(chunk)
+            for clause in _CLAUSE_RE.split(p):
+                clause = clause.strip()
+                if not clause:
+                    continue
+                words = clause.split()
+                if len(words) <= _MAX_CHUNK_WORDS:
+                    result.append(clause)
+                else:
+                    for i in range(0, len(words), _MAX_CHUNK_WORDS):
+                        chunk = " ".join(words[i:i + _MAX_CHUNK_WORDS])
+                        if chunk:
+                            result.append(chunk)
     return result if result else [text]
 
 
@@ -57,7 +65,7 @@ def _finish_audio(samples: np.ndarray, sr: int, skip_trim: bool = False) -> np.n
     if not skip_trim:
         samples = _trim_trailing_silence(samples, sr)
     samples = _fade_out(samples, sr)
-    pad = np.zeros(int(sr * 0.15), dtype=np.float32)
+    pad = np.zeros(int(sr * 0.05), dtype=np.float32)
     return np.concatenate([samples, pad])
 
 
@@ -157,7 +165,7 @@ class TTSEngine:
         if not parts:
             return _make_silence(sr, 0.1), sr
         result = np.concatenate(parts)
-        pad = np.zeros(int(sr * 0.25), dtype=np.float32)
+        pad = np.zeros(int(sr * 0.02), dtype=np.float32)
         result = np.concatenate([result, pad])
         return result, sr
 

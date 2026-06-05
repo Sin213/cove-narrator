@@ -144,6 +144,10 @@ class ReaderTab(QWidget):
         self._player.playback_finished.connect(self._on_chunk_finished)
         self._player.state_changed.connect(self._on_playback_state)
 
+        self._pitch_slider.valueChanged.connect(self._invalidate_prefetch)
+        self._speed_slider.valueChanged.connect(self._invalidate_prefetch)
+        self._depth_slider.valueChanged.connect(self._invalidate_prefetch)
+
     def _make_slider(self, name: str, color: str = "#50e6cf") -> tuple[QSlider, QSpinBox, QVBoxLayout]:
         group = QVBoxLayout()
         top_row = QHBoxLayout()
@@ -245,16 +249,22 @@ class ReaderTab(QWidget):
             self._player.play()
             return
         if self._is_reading:
-            self._is_reading = False
-            self._player.stop()
+            self._player.pause()
+            return
         text = self._text_display.toPlainText().strip()
         if not text:
             self._status.setText("No text to read.")
             return
+        cursor_pos = self._text_display.textCursor().position()
         self._prepare_sentences()
         if not self._sentences:
             self._status.setText("No sentences found.")
             return
+        if cursor_pos > 0:
+            for i, (start, end) in enumerate(self._sentence_positions):
+                if cursor_pos <= end:
+                    self._current_idx = i
+                    break
         self._is_reading = True
         self._full_audio_parts = []
         self._next_audio = None
@@ -306,6 +316,9 @@ class ReaderTab(QWidget):
         self._player.load(audio, sr)
         self._player.play()
         self._prefetch_next()
+
+    def _invalidate_prefetch(self):
+        self._next_audio = None
 
     def _prefetch_next(self):
         next_idx = self._current_idx + 1

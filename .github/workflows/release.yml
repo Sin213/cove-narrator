@@ -82,7 +82,15 @@ jobs:
             release/*.deb
             release/*.deb.sha256
           fail_on_unmatched_files: true
-          generate_release_notes: true
+          body: |
+            ## What's New
+
+            - **Start from highlight** — highlight any phrase in the Reader or Simple tab and press Play to start reading from that point onward
+            - **Pause / Resume** — pause reading at any time and resume where you left off; the Stop button is unchanged
+            - **Adjust voice mid-read** — change voice, speed, pitch, or depth while paused and the new settings apply to the next sentence
+
+            Thank you to Whooshy for the suggestions!
+          make_latest: true
 
   build-windows:
     needs: resolve-version
@@ -129,4 +137,12 @@ jobs:
             release/*-Portable.exe
             release/*-Portable.exe.sha256
           fail_on_unmatched_files: true
-          generate_release_notes: true
+          body: |
+            ## What's New
+
+            - **Start from highlight** — highlight any phrase in the Reader or Simple tab and press Play to start reading from that point onward
+            - **Pause / Resume** — pause reading at any time and resume where you left off; the Stop button is unchanged
+            - **Adjust voice mid-read** — change voice, speed, pitch, or depth while paused and the new settings apply to the next sentence
+
+            Thank you to Whooshy for the suggestions!
+          make_latest: true

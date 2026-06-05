@@ -121,16 +121,19 @@ class ReaderTab(QWidget):
         controls = QHBoxLayout()
         self._play_btn = QPushButton("▶  Read")
         self._play_btn.setObjectName("playButton")
+        self._play_btn.setFocusPolicy(Qt.NoFocus)
         self._play_btn.clicked.connect(self._on_play)
         controls.addWidget(self._play_btn)
 
         self._stop_btn = QPushButton("⏹  Stop")
         self._stop_btn.setObjectName("stopButton")
+        self._stop_btn.setFocusPolicy(Qt.NoFocus)
         self._stop_btn.clicked.connect(self._on_stop)
         controls.addWidget(self._stop_btn)
 
         self._export_btn = QPushButton("⬇  Export All as WAV")
         self._export_btn.setObjectName("exportButton")
+        self._export_btn.setFocusPolicy(Qt.NoFocus)
         self._export_btn.clicked.connect(self._on_export)
         controls.addWidget(self._export_btn)
 
@@ -143,10 +146,6 @@ class ReaderTab(QWidget):
 
         self._player.playback_finished.connect(self._on_chunk_finished)
         self._player.state_changed.connect(self._on_playback_state)
-
-        self._pitch_slider.valueChanged.connect(self._invalidate_prefetch)
-        self._speed_slider.valueChanged.connect(self._invalidate_prefetch)
-        self._depth_slider.valueChanged.connect(self._invalidate_prefetch)
 
     def _make_slider(self, name: str, color: str = "#50e6cf") -> tuple[QSlider, QSpinBox, QVBoxLayout]:
         group = QVBoxLayout()
@@ -228,7 +227,6 @@ class ReaderTab(QWidget):
                 idx = search_from
             self._sentence_positions.append((idx, idx + len(sentence)))
             search_from = idx + len(sentence)
-        self._current_idx = 0
         self._progress.setMaximum(len(self._sentences))
         self._progress.setValue(0)
         self._full_audio_parts = []
@@ -255,16 +253,28 @@ class ReaderTab(QWidget):
         if not text:
             self._status.setText("No text to read.")
             return
-        cursor_pos = self._text_display.textCursor().position()
+
+        cursor = self._text_display.textCursor()
+        has_selection = cursor.hasSelection()
+        anchor_pos = cursor.selectionStart() if has_selection else cursor.position()
+
         self._prepare_sentences()
         if not self._sentences:
             self._status.setText("No sentences found.")
             return
-        if cursor_pos > 0:
-            for i, (start, end) in enumerate(self._sentence_positions):
-                if cursor_pos <= end:
-                    self._current_idx = i
-                    break
+
+        self._current_idx = 0
+        for i, (start, end) in enumerate(self._sentence_positions):
+            if anchor_pos <= end:
+                self._current_idx = i
+                break
+
+        if has_selection:
+            sent_start = self._sentence_positions[self._current_idx][0]
+            if anchor_pos > sent_start:
+                sent_end = self._sentence_positions[self._current_idx][1]
+                self._sentences[self._current_idx] = text[anchor_pos:sent_end].strip()
+
         self._is_reading = True
         self._full_audio_parts = []
         self._next_audio = None
@@ -316,9 +326,6 @@ class ReaderTab(QWidget):
         self._player.load(audio, sr)
         self._player.play()
         self._prefetch_next()
-
-    def _invalidate_prefetch(self):
-        self._next_audio = None
 
     def _prefetch_next(self):
         next_idx = self._current_idx + 1

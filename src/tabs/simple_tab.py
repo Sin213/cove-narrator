@@ -101,16 +101,19 @@ class SimpleTab(QWidget):
         controls = QHBoxLayout()
         self._play_btn = QPushButton("▶  Play")
         self._play_btn.setObjectName("playButton")
+        self._play_btn.setFocusPolicy(Qt.NoFocus)
         self._play_btn.clicked.connect(self._on_play)
         controls.addWidget(self._play_btn)
 
         self._stop_btn = QPushButton("⏹  Stop")
         self._stop_btn.setObjectName("stopButton")
+        self._stop_btn.setFocusPolicy(Qt.NoFocus)
         self._stop_btn.clicked.connect(self._on_stop)
         controls.addWidget(self._stop_btn)
 
         self._export_btn = QPushButton("⬇  Export WAV")
         self._export_btn.setObjectName("exportButton")
+        self._export_btn.setFocusPolicy(Qt.NoFocus)
         self._export_btn.clicked.connect(self._on_export)
         controls.addWidget(self._export_btn)
 
@@ -202,7 +205,9 @@ class SimpleTab(QWidget):
         if self._player.is_paused:
             self._player.play()
             return
-        text = self._text_edit.toPlainText().strip()
+        cursor = self._text_edit.textCursor()
+        full_text = self._text_edit.toPlainText()
+        text = full_text[cursor.selectionStart():].strip() if cursor.hasSelection() else full_text.strip()
         if not text:
             self._status.setText("No text to speak.")
             return

@@ -255,7 +255,7 @@ class VoiceGalleryDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Cove Narrator v1.0.0")
+        self.setWindowTitle("Cove Narrator v1.1.0")
         self._icon_path = Path(__file__).resolve().parent.parent / "build" / "icon.png"
         if self._icon_path.exists():
             self.setWindowIcon(QIcon(str(self._icon_path)))
@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
             self,
             icon_path=str(self._icon_path) if self._icon_path.exists() else None,
             title="Cove Narrator",
-            version="v1.0.0",
+            version="v1.1.0",
         )
         chrome.addWidget(self._titlebar)
 

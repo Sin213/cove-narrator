@@ -5,23 +5,31 @@ import os
 block_cipher = None
 project_root = Path(os.path.abspath(SPECPATH)).parent.parent
 
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+
 a = Analysis(
     [str(project_root / 'src' / 'main.py')],
     pathex=[str(project_root)],
-    binaries=[],
+    binaries=collect_dynamic_libs('espeakng_loader'),
     datas=[
         (str(project_root / 'data' / 'models' / 'kokoro-v1.0.onnx'), 'data/models'),
         (str(project_root / 'data' / 'models' / 'voices-v1.0.bin'), 'data/models'),
         (str(project_root / 'data' / 'cmudict.txt'), 'data'),
-    ],
+    ]
+    + collect_data_files('kokoro_onnx')
+    + collect_data_files('phonemizer')
+    + collect_data_files('language_tags')
+    + collect_data_files('espeakng_loader'),
     hiddenimports=[
         'kokoro_onnx',
+        'espeakng_loader',
         'onnxruntime',
         'sounddevice',
         'soundfile',
         'librosa',
         'numpy',
         'PySide6',
+        'pymupdf',
     ],
     hookspath=[],
     hooksconfig={},

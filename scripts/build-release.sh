@@ -65,6 +65,7 @@ echo "==> Running PyInstaller"
     --collect-data phonemizer \
     --collect-data language_tags \
     --collect-data espeakng_loader \
+    --collect-binaries espeakng_loader \
     --add-data "data/models/kokoro-v1.0.onnx:data/models" \
     --add-data "data/models/voices-v1.0.bin:data/models" \
     --add-data "data/cmudict.txt:data" \

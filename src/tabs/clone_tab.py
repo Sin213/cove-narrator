@@ -559,7 +559,7 @@ class CloneTab(QWidget):
 
     # -- HD Neural Clone (optional download) --
 
-    def _on_hd_action(self):
+    def _on_hd_action(self, _after_install=False):
         missing = []
         for mod in ("torch", "transformers", "qwen_tts", "huggingface_hub"):
             try:
@@ -567,6 +567,13 @@ class CloneTab(QWidget):
             except ImportError:
                 missing.append(mod.replace("_", "-"))
         if missing:
+            if _after_install:
+                self._hd_status.setText(
+                    f"Still missing after install: {', '.join(missing)}. "
+                    "The installed packages may not be compatible with "
+                    "this build. Try installing Python 3.12 from python.org."
+                )
+                return
             self._offer_hd_deps_install(missing)
             return
 
@@ -643,10 +650,18 @@ class CloneTab(QWidget):
         self._hd_deps_worker.start()
 
     def _on_hd_deps_installed(self):
+        import importlib
+        import site
+        if getattr(sys, 'frozen', False):
+            deps = str(
+                Path(sys.executable).parent / "dependencies" / "cove-narrator"
+            )
+            if deps not in sys.path:
+                site.addsitedir(deps)
+        importlib.invalidate_caches()
         self._hd_btn.setEnabled(True)
-        self._hd_status.setText(
-            "Dependencies installed! Click HD Voice Clone again to continue."
-        )
+        self._hd_status.setText("Dependencies installed!")
+        self._on_hd_action(_after_install=True)
 
     def _on_hd_deps_error(self, msg):
         self._hd_btn.setEnabled(True)

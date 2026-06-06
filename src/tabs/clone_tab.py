@@ -561,18 +561,30 @@ class CloneTab(QWidget):
 
     def _on_hd_action(self, _after_install=False):
         missing = []
+        import_errors = {}
         for mod in ("torch", "transformers", "qwen_tts", "huggingface_hub"):
             try:
                 __import__(mod)
-            except ImportError:
+            except Exception as e:
                 missing.append(mod.replace("_", "-"))
+                import_errors[mod] = f"{type(e).__name__}: {e}"
         if missing:
             if _after_install:
-                self._hd_status.setText(
-                    f"Still missing after install: {', '.join(missing)}. "
-                    "The installed packages may not be compatible with "
-                    "this build. Try installing Python 3.12 from python.org."
-                )
+                diag = [f"Missing: {', '.join(missing)}"]
+                if getattr(sys, 'frozen', False):
+                    deps = (
+                        Path(sys.executable).parent
+                        / "dependencies" / "cove-narrator"
+                    )
+                    diag.append(f"Dir exists: {deps.exists()}")
+                    diag.append(f"In sys.path: {str(deps) in sys.path}")
+                    if deps.exists():
+                        top = sorted(p.name for p in deps.iterdir())[:15]
+                        diag.append(f"Contents: {top}")
+                    diag.append(f"sys.path: {sys.path[:5]}")
+                for mod, err in import_errors.items():
+                    diag.append(f"{mod}: {err}")
+                self._hd_status.setText("\n".join(diag))
                 return
             self._offer_hd_deps_install(missing)
             return

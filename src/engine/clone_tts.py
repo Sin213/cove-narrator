@@ -70,9 +70,15 @@ class QwenCloneEngine:
 
     def download(self, progress_cb=None):
         if progress_cb:
-            progress_cb("Downloading Qwen3-TTS 1.7B (4.3 GB)…")
+            progress_cb("Downloading Qwen3-TTS 1.7B…")
         from huggingface_hub import snapshot_download
-        snapshot_download(self._MODEL_REPO, local_dir=str(self.model_dir()))
+        tqdm_cls = None
+        if progress_cb:
+            tqdm_cls = _make_hf_tqdm(progress_cb)
+        snapshot_download(
+            self._MODEL_REPO, local_dir=str(self.model_dir()),
+            tqdm_class=tqdm_cls,
+        )
         if progress_cb:
             progress_cb("Download complete.")
 
@@ -110,3 +116,40 @@ class QwenCloneEngine:
         if not isinstance(audio, np.ndarray):
             audio = audio.cpu().numpy()
         return audio.astype(np.float32).squeeze(), int(sr)
+
+
+def _make_hf_tqdm(progress_cb):
+    import time
+    from tqdm import tqdm
+
+    class _HFProgress(tqdm):
+        def __init__(self, *args, **kwargs):
+            kwargs["disable"] = False
+            super().__init__(*args, **kwargs)
+            self._start = time.monotonic()
+            self._cb = progress_cb
+
+        def update(self, n=1):
+            super().update(n)
+            if not self.total:
+                return
+            done = self.n
+            pct = int(done / self.total * 100)
+            elapsed = time.monotonic() - self._start
+            if pct > 1 and elapsed > 3:
+                eta_sec = elapsed / pct * (100 - pct)
+                eta_min = max(1, int(eta_sec / 60))
+                done_mb = done / 1_000_000
+                total_mb = self.total / 1_000_000
+                self._cb(
+                    f"Downloading… {pct}%  —  "
+                    f"ETA ~{eta_min} min  "
+                    f"({done_mb:.0f} / {total_mb:.0f} MB)"
+                )
+            elif pct > 0:
+                self._cb(f"Downloading… {pct}%")
+
+        def close(self):
+            super().close()
+
+    return _HFProgress

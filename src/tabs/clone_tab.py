@@ -741,6 +741,13 @@ class _HDDepsInstallWorker(QThread):
         super().__init__()
         self._deps_dir = deps_dir
 
+    @staticmethod
+    def _popen_kwargs() -> dict:
+        kw = {}
+        if platform.system() == "Windows":
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+        return kw
+
     def run(self):
         try:
             pip_cmd = self._find_pip()
@@ -751,21 +758,25 @@ class _HDDepsInstallWorker(QThread):
                 )
                 return
 
-            cmd = [*pip_cmd, "install"]
+            cmd = [*pip_cmd, "install", "--progress-bar", "off"]
             if self._deps_dir:
                 self._deps_dir.mkdir(parents=True, exist_ok=True)
                 cmd += ["--target", str(self._deps_dir)]
             cmd += self.HD_PACKAGES
 
-            self.progress.emit(
-                "Installing HD dependencies (this may take several minutes)…"
+            self.progress.emit("Starting package installation…")
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, **self._popen_kwargs(),
             )
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=3600,
-            )
-            if result.returncode != 0:
-                err = result.stderr.strip()
-                self.error.emit(f"Installation failed:\n{err[-500:]}")
+            for line in proc.stdout:
+                line = line.strip()
+                if line:
+                    self.progress.emit(line)
+            proc.wait(timeout=3600)
+
+            if proc.returncode != 0:
+                self.error.emit("Installation failed. Check your internet connection.")
                 return
 
             if self._deps_dir and str(self._deps_dir) not in sys.path:
@@ -831,6 +842,7 @@ class _HDDepsInstallWorker(QThread):
             subprocess.run(
                 [str(py_exe), str(get_pip)],
                 capture_output=True, timeout=300,
+                **self._popen_kwargs(),
             )
             get_pip.unlink(missing_ok=True)
 

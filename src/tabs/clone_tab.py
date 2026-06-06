@@ -875,14 +875,29 @@ class _HDDepsInstallWorker(QThread):
         if not getattr(sys, 'frozen', False):
             return [sys.executable, "-m", "pip"]
 
-        for pip in ("pip3", "pip"):
-            if shutil.which(pip):
-                return [pip]
+        app_ver = str(sys.version_info[:2])
         for python in ("python", "python3"):
-            if shutil.which(python):
-                return [python, "-m", "pip"]
+            path = shutil.which(python)
+            if not path:
+                continue
+            try:
+                r = subprocess.run(
+                    [path, "-c",
+                     "import sys; print(sys.version_info[:2])"],
+                    capture_output=True, text=True, timeout=10,
+                    **self._popen_kwargs(),
+                )
+                if r.stdout.strip() == app_ver:
+                    return [path, "-m", "pip"]
+            except Exception:
+                pass
 
         if platform.system() == "Windows":
+            ver_str = f"{sys.version_info.major}.{sys.version_info.minor}"
+            self.progress.emit(
+                f"No compatible Python {ver_str} found on PATH. "
+                "Bootstrapping one…"
+            )
             return self._bootstrap_windows_pip()
         return None
 

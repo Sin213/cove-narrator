@@ -776,23 +776,38 @@ class _HDDepsInstallWorker(QThread):
             )
 
             downloaded_mb = 0.0
+            pkg_count = 0
+            dl_count = 0
             start = time.monotonic()
             _SIZE_RE = re.compile(r'\(([\d.]+)\s*(kB|MB|GB)\)')
 
-            for line in proc.stdout:
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    if proc.poll() is not None:
+                        break
+                    continue
                 line = line.strip()
                 if not line:
                     continue
 
-                m = _SIZE_RE.search(line)
-                if m and ("Downloading" in line or "Using cached" in line):
-                    size = float(m.group(1))
-                    unit = m.group(2)
-                    if unit == "kB":
-                        size /= 1024
-                    elif unit == "GB":
-                        size *= 1024
-                    downloaded_mb += size
+                if line.startswith("Collecting"):
+                    pkg_count += 1
+                    pkg = line.split()[1].split(">")[0].split("<")[0].split("=")[0]
+                    self.progress.emit(
+                        f"Resolving: {pkg} ({pkg_count} packages)"
+                    )
+                elif "Downloading" in line:
+                    dl_count += 1
+                    m = _SIZE_RE.search(line)
+                    if m:
+                        size = float(m.group(1))
+                        unit = m.group(2)
+                        if unit == "kB":
+                            size /= 1024
+                        elif unit == "GB":
+                            size *= 1024
+                        downloaded_mb += size
 
                     pct = min(95, int(
                         downloaded_mb / self.ESTIMATED_TOTAL_MB * 100
@@ -810,11 +825,17 @@ class _HDDepsInstallWorker(QThread):
                         self.progress.emit(
                             f"Downloading… ({downloaded_mb:.0f} MB)"
                         )
-                elif line.startswith("Collecting"):
-                    pkg = line.split()[1].split(">")[0].split("<")[0]
-                    self.progress.emit(f"Resolving: {pkg}")
+                elif "Using cached" in line:
+                    dl_count += 1
+                    self.progress.emit(
+                        f"Using cached packages… "
+                        f"({dl_count} of {pkg_count})"
+                    )
                 elif line.startswith("Installing collected"):
-                    self.progress.emit("Installing packages… (almost done)")
+                    self.progress.emit(
+                        f"Installing {pkg_count} packages… "
+                        f"(this may take a minute)"
+                    )
                 elif line.startswith("Successfully installed"):
                     self.progress.emit("Installation complete!")
 

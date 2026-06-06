@@ -981,6 +981,14 @@ class _HDDepsInstallWorker(QThread):
             )
             get_pip.unlink(missing_ok=True)
 
+            self.progress.emit("Installing build tools…")
+            subprocess.run(
+                [str(py_exe), "-m", "pip", "install",
+                 "setuptools", "wheel"],
+                capture_output=True, timeout=300,
+                **self._popen_kwargs(),
+            )
+
             if py_exe.exists():
                 return [str(py_exe), "-m", "pip"]
         except Exception:

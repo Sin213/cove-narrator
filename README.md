@@ -8,17 +8,19 @@ Cross-platform: **Linux** and **Windows**. Same codebase, same features on both.
 
 ## Features
 
-**Three modes:**
+**Four modes:**
 
 - **Simple** — Type or paste text, drop in inline tags (`[Pause]`, `[Soft]`, `[Slow]`, `[Speed]`, `[Pitch]`), hit Play. Unknown words get flagged so you can spell them out in Custom mode.
 - **Custom** — Spell tricky words phonetically with ARPABET buttons. Drop a reference audio clip and Cove analyzes it, picks the closest voice blend, and sets sliders to match.
 - **Reader** — Open `.txt` or `.pdf` files. Cove reads sentence by sentence with live highlighting. Click any sentence to jump. Next-sentence prefetch keeps playback seamless.
+- **Clone** — Drop a voice clip or record yourself. Cove auto-analyzes the reference and finds the closest Kokoro voice blend, then auto-populates pitch/speed/depth sliders you can fine-tune. Save matched voices as presets usable across all tabs. Optional HD neural cloning via Qwen3-TTS 1.7B (4.3 GB download) for users who want closer voice similarity.
 
 **Voice system:**
 
 - 27 built-in voices — American and British, male and female, each with a personality description (warm, dramatic, playful, etc.)
 - Voice gallery with search and region/gender filters
 - **Voice blending** — Drop a reference clip and Cove finds the optimal mix of built-in voices to match its pitch (e.g. 70% Onyx + 30% Echo). Save blends by name and reuse them across sessions.
+- **Voice cloning** — Analyze any voice clip to auto-match the closest Kokoro blend with tunable sliders. Save cloned voices as presets. Optional HD neural cloning for higher fidelity (separate download).
 
 **Audio:**
 
@@ -120,10 +122,12 @@ cove-narrator/
       analyzer.py        Reference audio analysis (F0, gender detection)
       audio_dsp.py       Pitch shift, depth, speed conversion
       voice_blend.py     Voice blend optimizer + custom voice storage
+      clone_tts.py       Voice match engine + optional HD neural cloning
     tabs/
       simple_tab.py      Simple narration with inline tags
       custom_tab.py      Phoneme builder + reference audio matching
       reader_tab.py      Document reader with sentence tracking
+      clone_tab.py       Voice cloning with auto-analysis + sliders
     utils/
       theme.py           Cove dark theme (QSS stylesheet)
       chrome.py          Custom frameless titlebar + edge resizing

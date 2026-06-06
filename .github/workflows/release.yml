@@ -83,13 +83,14 @@ jobs:
             release/*.deb.sha256
           fail_on_unmatched_files: true
           body: |
-            ## What's New
+            ## What's New in v2.0.0
 
-            - **Start from highlight** — highlight any phrase in the Reader or Simple tab and press Play to start reading from that point onward
-            - **Pause / Resume** — pause reading at any time and resume where you left off; the Stop button is unchanged
-            - **Adjust voice mid-read** — change voice, speed, pitch, or depth while paused and the new settings apply to the next sentence
+            - **Clone tab** — drop a voice clip or record yourself, and Cove auto-analyzes the reference to find the closest Kokoro voice blend. Pitch, speed, and depth sliders auto-populate so you can fine-tune the match. Save cloned voices as presets usable across all tabs.
+            - **HD neural cloning (optional)** — for users who want closer voice similarity, an optional 4.3 GB model download (Qwen3-TTS 1.7B) adds neural voice cloning. Requires an NVIDIA GPU.
+            - **Mic recording** — record reference audio directly in the app with a level meter and duration display.
+            - **Clone presets in voice gallery** — saved clone presets appear in the sidebar voice gallery alongside built-in voices and are restored on app restart.
 
-            Thank you to Whooshy for the suggestions!
+            Thank you to Whooshy for the voice cloning suggestions!
           make_latest: true
 
   build-windows:
@@ -138,11 +139,12 @@ jobs:
             release/*-Portable.exe.sha256
           fail_on_unmatched_files: true
           body: |
-            ## What's New
+            ## What's New in v2.0.0
 
-            - **Start from highlight** — highlight any phrase in the Reader or Simple tab and press Play to start reading from that point onward
-            - **Pause / Resume** — pause reading at any time and resume where you left off; the Stop button is unchanged
-            - **Adjust voice mid-read** — change voice, speed, pitch, or depth while paused and the new settings apply to the next sentence
+            - **Clone tab** — drop a voice clip or record yourself, and Cove auto-analyzes the reference to find the closest Kokoro voice blend. Pitch, speed, and depth sliders auto-populate so you can fine-tune the match. Save cloned voices as presets usable across all tabs.
+            - **HD neural cloning (optional)** — for users who want closer voice similarity, an optional 4.3 GB model download (Qwen3-TTS 1.7B) adds neural voice cloning. Requires an NVIDIA GPU.
+            - **Mic recording** — record reference audio directly in the app with a level meter and duration display.
+            - **Clone presets in voice gallery** — saved clone presets appear in the sidebar voice gallery alongside built-in voices and are restored on app restart.
 
-            Thank you to Whooshy for the suggestions!
+            Thank you to Whooshy for the voice cloning suggestions!
           make_latest: true

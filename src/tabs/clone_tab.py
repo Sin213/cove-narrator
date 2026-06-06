@@ -902,6 +902,11 @@ class _HDDepsInstallWorker(QThread):
             import site
             if self._deps_dir:
                 site.addsitedir(str(self._deps_dir))
+                py_dir = self._deps_dir.parent / "_python"
+                if py_dir.is_dir():
+                    for zf in py_dir.glob("python*.zip"):
+                        if str(zf) not in sys.path:
+                            sys.path.append(str(zf))
             importlib.invalidate_caches()
 
             self.progress.emit("Verifying imports…")

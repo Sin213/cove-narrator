@@ -616,7 +616,7 @@ class CloneTab(QWidget):
         )
         if is_frozen:
             detail += (
-                "Packages will be installed to a 'dependencies' folder\n"
+                "Packages will be installed to 'dependencies\\cove-narrator'\n"
                 "next to the app executable."
             )
         else:
@@ -629,7 +629,7 @@ class CloneTab(QWidget):
 
         deps_dir = None
         if is_frozen:
-            deps_dir = Path(sys.executable).parent / "dependencies"
+            deps_dir = Path(sys.executable).parent / "dependencies" / "cove-narrator"
 
         self._hd_btn.setEnabled(False)
         self._hd_status.setText("Installing HD dependencies…")

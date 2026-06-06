@@ -584,6 +584,12 @@ class CloneTab(QWidget):
                     diag.append(f"sys.path: {sys.path[:5]}")
                 for mod, err in import_errors.items():
                     diag.append(f"{mod}: {err}")
+                log_file = (
+                    Path(sys.executable).parent
+                    / "dependencies" / "hd_install.log"
+                ) if getattr(sys, 'frozen', False) else None
+                if log_file and log_file.exists():
+                    diag.append(f"\nSee log: {log_file}")
                 self._hd_status.setText("\n".join(diag))
                 return
             self._offer_hd_deps_install(missing)
@@ -780,8 +786,18 @@ class _HDDepsInstallWorker(QThread):
         return kw
 
     def run(self):
+        log_path = None
+        if self._deps_dir:
+            log_path = self._deps_dir.parent / "hd_install.log"
+
+        def log(msg):
+            if log_path:
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(msg + "\n")
+
         try:
             pip_cmd = self._find_pip()
+            log(f"pip_cmd: {pip_cmd}")
             if not pip_cmd:
                 self.error.emit(
                     "Could not find pip or Python on this system.\n"
@@ -795,6 +811,7 @@ class _HDDepsInstallWorker(QThread):
                 self._deps_dir.mkdir(parents=True, exist_ok=True)
                 cmd += ["--target", str(self._deps_dir)]
             cmd += self.HD_PACKAGES
+            log(f"full command: {cmd}")
 
             self.progress.emit("Resolving dependencies…")
             env = {**os.environ, "PYTHONUNBUFFERED": "1"}
@@ -815,6 +832,7 @@ class _HDDepsInstallWorker(QThread):
                     if proc.poll() is not None:
                         break
                     continue
+                log(f"pip: {line.rstrip()}")
                 line = line.strip()
                 if not line:
                     continue
@@ -868,6 +886,11 @@ class _HDDepsInstallWorker(QThread):
                     self.progress.emit("Installation complete!")
 
             proc.wait(timeout=3600)
+            log(f"returncode: {proc.returncode}")
+
+            if self._deps_dir and self._deps_dir.exists():
+                contents = sorted(p.name for p in self._deps_dir.iterdir())
+                log(f"target contents ({len(contents)}): {contents[:30]}")
 
             if proc.returncode != 0:
                 self.error.emit(
@@ -882,6 +905,7 @@ class _HDDepsInstallWorker(QThread):
         except subprocess.TimeoutExpired:
             self.error.emit("Installation timed out.")
         except Exception as e:
+            log(f"exception: {e}")
             self.error.emit(str(e))
 
     def _find_pip(self) -> list[str] | None:

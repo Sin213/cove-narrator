@@ -10,6 +10,7 @@ class Preset:
     speed: int = 0
     depth: int = 0
     is_builtin: bool = False
+    blend_key: str = ""
 
 _BUILTIN_VOICES = [
     # American Female
@@ -61,6 +62,7 @@ class PresetManager:
                 presets.append(Preset(
                     name=data["name"], voice_id=data["voice_id"],
                     pitch=data.get("pitch", 0), speed=data.get("speed", 0), depth=data.get("depth", 0),
+                    blend_key=data.get("blend_key", ""),
                 ))
             except (json.JSONDecodeError, KeyError):
                 continue
@@ -74,6 +76,8 @@ class PresetManager:
         path = self._dir / f"{safe_name}.json"
         data = {"name": preset.name, "voice_id": preset.voice_id,
                 "pitch": preset.pitch, "speed": preset.speed, "depth": preset.depth}
+        if preset.blend_key:
+            data["blend_key"] = preset.blend_key
         path.write_text(json.dumps(data, indent=2))
 
     def delete_preset(self, name: str):

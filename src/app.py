@@ -20,6 +20,7 @@ from src.utils.settings_dialog import SettingsDialog
 from src.tabs.simple_tab import SimpleTab
 from src.tabs.custom_tab import CustomTab
 from src.tabs.reader_tab import ReaderTab
+from src.tabs.clone_tab import CloneTab
 
 _MODES = [
     {"icon": "≡", "title": "Simple", "desc": "Type & tag, then speak",
@@ -31,6 +32,9 @@ _MODES = [
     {"icon": "☰", "title": "Reader", "desc": "Read documents aloud",
      "head": "Document reader",
      "hdesc": "Open a file and Cove reads it sentence by sentence, highlighting as it goes. Click any sentence to jump there."},
+    {"icon": "🎤", "title": "Clone", "desc": "Clone any voice",
+     "head": "Voice cloning",
+     "hdesc": "Drop a voice clip to auto-match with Kokoro, or use neural cloning for closer results. Save matched voices as presets."},
 ]
 
 
@@ -132,7 +136,7 @@ class VoiceGalleryDialog(QDialog):
         self.setWindowTitle("Choose a voice")
         self.setMinimumSize(660, 460)
         self._selected = current_id
-        self._presets = [p for p in presets if p.is_builtin]
+        self._presets = [p for p in presets if p.is_builtin or p.blend_key]
 
         lay = QVBoxLayout(self)
         lay.setSpacing(12)
@@ -211,7 +215,8 @@ class VoiceGalleryDialog(QDialog):
         f = QFrame()
         f.setObjectName("voiceTile")
         f.setCursor(Qt.PointingHandCursor)
-        active = preset.voice_id == self._selected
+        key = preset.blend_key if preset.blend_key else preset.voice_id
+        active = key == self._selected
         if active:
             f.setStyleSheet(
                 "#voiceTile { background: rgba(80,230,207,15);"
@@ -234,14 +239,18 @@ class VoiceGalleryDialog(QDialog):
         top.addStretch()
         lay.addLayout(top)
         vid = preset.voice_id
+        pick_key = preset.blend_key if preset.blend_key else vid
         chips = QHBoxLayout()
         chips.setSpacing(5)
-        chips.addWidget(QLabel("UK" if vid.startswith("b") else "US", objectName="chipRegion"))
-        chips.addWidget(QLabel("Female" if len(vid) > 1 and vid[1] == "f" else "Male",
-                               objectName="chipGender"))
+        if preset.blend_key:
+            chips.addWidget(QLabel("Clone", objectName="chipRegion"))
+        else:
+            chips.addWidget(QLabel("UK" if vid.startswith("b") else "US", objectName="chipRegion"))
+            chips.addWidget(QLabel("Female" if len(vid) > 1 and vid[1] == "f" else "Male",
+                                   objectName="chipGender"))
         chips.addStretch()
         lay.addLayout(chips)
-        f.mousePressEvent = lambda e, v=vid: self._pick(v)
+        f.mousePressEvent = lambda e, v=pick_key: self._pick(v)
         return f
 
     def _pick(self, vid):
@@ -316,9 +325,12 @@ class MainWindow(QMainWindow):
         self._simple_tab = SimpleTab(self._engine, self._player, self)
         self._custom_tab = CustomTab(self._engine, self._player, self)
         self._reader_tab = ReaderTab(self._engine, self._player, self)
+        self._clone_tab = CloneTab(self._engine, self._player, self)
+        self._clone_tab.preset_saved.connect(self._populate_presets)
         self._stack.addWidget(self._simple_tab)
         self._stack.addWidget(self._custom_tab)
         self._stack.addWidget(self._reader_tab)
+        self._stack.addWidget(self._clone_tab)
         ml.addWidget(self._stack, 1)
         root.addWidget(main, 1)
 
@@ -388,6 +400,12 @@ class MainWindow(QMainWindow):
     # ---- voice management --------------------------------------------------
     def _select_initial_voice(self):
         all_p = self._presets.get_all_presets()
+        last_blend = self._config.get("last_blend_key", "")
+        if last_blend:
+            for p in all_p:
+                if p.blend_key == last_blend:
+                    self._apply_full_preset(p)
+                    return
         last = self._config.get("last_voice", "af_heart")
         for p in all_p:
             if p.voice_id == last:
@@ -407,10 +425,14 @@ class MainWindow(QMainWindow):
         cur = self._current_voice_preset.voice_id if self._current_voice_preset else "af_heart"
         dlg = VoiceGalleryDialog(all_p, cur, self)
         if dlg.exec():
-            vid = dlg.selected_voice_id()
+            selected = dlg.selected_voice_id()
             for p in all_p:
-                if p.voice_id == vid:
-                    self._apply_voice(p)
+                key = p.blend_key if p.blend_key else p.voice_id
+                if key == selected:
+                    if p.blend_key:
+                        self._apply_full_preset(p)
+                    else:
+                        self._apply_voice(p)
                     break
 
     def get_current_voice_id(self):
@@ -507,10 +529,20 @@ class MainWindow(QMainWindow):
         self._voice_card._avatar.setText("✦")
 
     def _apply_full_preset(self, preset):
-        self._apply_voice(preset)
+        if preset.blend_key:
+            try:
+                tensor, meta = self._custom_voices.load(preset.blend_key)
+                self._set_custom_voice(tensor, meta.get("weights", {}))
+                self._current_voice_preset = preset
+                self._voice_card.set_voice(preset)
+            except Exception:
+                self._apply_voice(preset)
+        else:
+            self._apply_voice(preset)
         self._simple_tab.apply_preset(preset)
         self._custom_tab.apply_preset(preset)
         self._reader_tab.apply_preset(preset)
+        self._clone_tab.apply_preset(preset)
 
     def _save_preset(self):
         if self._custom_voice_tensor is not None:
@@ -538,6 +570,7 @@ class MainWindow(QMainWindow):
         self._simple_tab.set_save_dir(save_dir)
         self._custom_tab.set_save_dir(save_dir)
         self._reader_tab.set_save_dir(save_dir)
+        self._clone_tab.set_save_dir(save_dir)
 
     def _open_settings(self):
         dlg = SettingsDialog(self)
@@ -570,6 +603,7 @@ class MainWindow(QMainWindow):
         self._player.stop()
         self._simple_tab._play_btn.setEnabled(True)
         self._custom_tab._play_btn.setEnabled(True)
+        self._clone_tab._play_btn.setEnabled(True)
         self._reader_tab._on_stop()
 
     def _export_current(self):
@@ -599,6 +633,15 @@ class MainWindow(QMainWindow):
         self._config["window_height"] = self.height()
         if self._current_voice_preset:
             self._config["last_voice"] = self._current_voice_preset.voice_id
+            if self._current_voice_preset.blend_key:
+                self._config["last_blend_key"] = self._current_voice_preset.blend_key
+            elif "last_blend_key" in self._config:
+                del self._config["last_blend_key"]
         save_config(self._config)
         self._player.stop()
+        self._clone_tab._cleanup_temp_rec()
+        for attr in ("_hd_download_worker", "_hd_synth_worker", "_worker", "_analyze_worker"):
+            w = getattr(self._clone_tab, attr, None)
+            if w and w.isRunning():
+                w.wait(1000)
         event.accept()

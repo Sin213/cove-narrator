@@ -1,7 +1,10 @@
+import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -736,6 +739,7 @@ class _HDDepsInstallWorker(QThread):
     error = Signal(str)
 
     HD_PACKAGES = ["torch", "transformers", "qwen-tts", "huggingface-hub"]
+    ESTIMATED_TOTAL_MB = 5000
 
     def __init__(self, deps_dir: Path | None):
         super().__init__()
@@ -764,19 +768,62 @@ class _HDDepsInstallWorker(QThread):
                 cmd += ["--target", str(self._deps_dir)]
             cmd += self.HD_PACKAGES
 
-            self.progress.emit("Starting package installation…")
+            self.progress.emit("Resolving dependencies…")
+            env = {**os.environ, "PYTHONUNBUFFERED": "1"}
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, **self._popen_kwargs(),
+                text=True, bufsize=1, env=env, **self._popen_kwargs(),
             )
+
+            downloaded_mb = 0.0
+            start = time.monotonic()
+            _SIZE_RE = re.compile(r'\(([\d.]+)\s*(kB|MB|GB)\)')
+
             for line in proc.stdout:
                 line = line.strip()
-                if line:
-                    self.progress.emit(line)
+                if not line:
+                    continue
+
+                m = _SIZE_RE.search(line)
+                if m and ("Downloading" in line or "Using cached" in line):
+                    size = float(m.group(1))
+                    unit = m.group(2)
+                    if unit == "kB":
+                        size /= 1024
+                    elif unit == "GB":
+                        size *= 1024
+                    downloaded_mb += size
+
+                    pct = min(95, int(
+                        downloaded_mb / self.ESTIMATED_TOTAL_MB * 100
+                    ))
+                    elapsed = time.monotonic() - start
+                    if pct > 2 and elapsed > 5:
+                        eta_sec = elapsed / pct * (100 - pct)
+                        eta_min = max(1, int(eta_sec / 60))
+                        self.progress.emit(
+                            f"Downloading… {pct}%  —  "
+                            f"ETA ~{eta_min} min  "
+                            f"({downloaded_mb:.0f} / ~{self.ESTIMATED_TOTAL_MB} MB)"
+                        )
+                    else:
+                        self.progress.emit(
+                            f"Downloading… ({downloaded_mb:.0f} MB)"
+                        )
+                elif line.startswith("Collecting"):
+                    pkg = line.split()[1].split(">")[0].split("<")[0]
+                    self.progress.emit(f"Resolving: {pkg}")
+                elif line.startswith("Installing collected"):
+                    self.progress.emit("Installing packages… (almost done)")
+                elif line.startswith("Successfully installed"):
+                    self.progress.emit("Installation complete!")
+
             proc.wait(timeout=3600)
 
             if proc.returncode != 0:
-                self.error.emit("Installation failed. Check your internet connection.")
+                self.error.emit(
+                    "Installation failed. Check your internet connection."
+                )
                 return
 
             if self._deps_dir and str(self._deps_dir) not in sys.path:

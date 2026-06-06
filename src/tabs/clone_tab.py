@@ -1,3 +1,7 @@
+import platform
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -560,7 +564,7 @@ class CloneTab(QWidget):
             except ImportError:
                 missing.append(mod.replace("_", "-"))
         if missing:
-            self._hd_status.setText(f"Missing: pip install {' '.join(missing)}")
+            self._offer_hd_deps_install(missing)
             return
 
         from src.engine.clone_tts import QwenCloneEngine
@@ -595,6 +599,55 @@ class CloneTab(QWidget):
         self._hd_download_worker.finished.connect(self._on_hd_download_done)
         self._hd_download_worker.error.connect(lambda msg: self._on_hd_download_error(msg))
         self._hd_download_worker.start()
+
+    def _offer_hd_deps_install(self, missing: list[str]):
+        from PySide6.QtWidgets import QMessageBox
+        is_frozen = getattr(sys, 'frozen', False)
+
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("HD Voice Clone — Setup Required")
+        dlg.setIcon(QMessageBox.Information)
+        dlg.setText("HD Voice Clone requires additional packages.")
+        detail = (
+            f"Missing: {', '.join(missing)}\n\n"
+            "This download is ~5 GB and requires:\n"
+            "  - NVIDIA GPU with 4+ GB VRAM\n"
+            "  - ~5 GB disk space\n\n"
+        )
+        if is_frozen:
+            detail += (
+                "Packages will be installed to a 'dependencies' folder\n"
+                "next to the app executable."
+            )
+        else:
+            detail += "Packages will be installed to your Python environment."
+        dlg.setInformativeText(detail)
+        dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        dlg.button(QMessageBox.Ok).setText("Install (~5 GB)")
+        if dlg.exec() != QMessageBox.Ok:
+            return
+
+        deps_dir = None
+        if is_frozen:
+            deps_dir = Path(sys.executable).parent / "dependencies"
+
+        self._hd_btn.setEnabled(False)
+        self._hd_status.setText("Installing HD dependencies…")
+        self._hd_deps_worker = _HDDepsInstallWorker(deps_dir)
+        self._hd_deps_worker.progress.connect(lambda msg: self._hd_status.setText(msg))
+        self._hd_deps_worker.finished.connect(self._on_hd_deps_installed)
+        self._hd_deps_worker.error.connect(lambda msg: self._on_hd_deps_error(msg))
+        self._hd_deps_worker.start()
+
+    def _on_hd_deps_installed(self):
+        self._hd_btn.setEnabled(True)
+        self._hd_status.setText(
+            "Dependencies installed! Click HD Voice Clone again to continue."
+        )
+
+    def _on_hd_deps_error(self, msg):
+        self._hd_btn.setEnabled(True)
+        self._hd_status.setText(f"Install failed: {msg}")
 
     def _on_hd_download_done(self):
         self._hd_btn.setEnabled(True)
@@ -675,3 +728,114 @@ class _HDSynthWorker(QThread):
             self.finished.emit(audio, sr)
         except Exception as e:
             self.error.emit(str(e))
+
+
+class _HDDepsInstallWorker(QThread):
+    finished = Signal()
+    progress = Signal(str)
+    error = Signal(str)
+
+    HD_PACKAGES = ["torch", "transformers", "qwen-tts", "huggingface-hub"]
+
+    def __init__(self, deps_dir: Path | None):
+        super().__init__()
+        self._deps_dir = deps_dir
+
+    def run(self):
+        try:
+            pip_cmd = self._find_pip()
+            if not pip_cmd:
+                self.error.emit(
+                    "Could not find pip or Python on this system.\n"
+                    "Install Python from python.org, then restart the app."
+                )
+                return
+
+            cmd = [*pip_cmd, "install"]
+            if self._deps_dir:
+                self._deps_dir.mkdir(parents=True, exist_ok=True)
+                cmd += ["--target", str(self._deps_dir)]
+            cmd += self.HD_PACKAGES
+
+            self.progress.emit(
+                "Installing HD dependencies (this may take several minutes)…"
+            )
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=3600,
+            )
+            if result.returncode != 0:
+                err = result.stderr.strip()
+                self.error.emit(f"Installation failed:\n{err[-500:]}")
+                return
+
+            if self._deps_dir and str(self._deps_dir) not in sys.path:
+                sys.path.insert(0, str(self._deps_dir))
+
+            self.finished.emit()
+        except subprocess.TimeoutExpired:
+            self.error.emit("Installation timed out.")
+        except Exception as e:
+            self.error.emit(str(e))
+
+    def _find_pip(self) -> list[str] | None:
+        if not getattr(sys, 'frozen', False):
+            return [sys.executable, "-m", "pip"]
+
+        for pip in ("pip3", "pip"):
+            if shutil.which(pip):
+                return [pip]
+        for python in ("python", "python3"):
+            if shutil.which(python):
+                return [python, "-m", "pip"]
+
+        if platform.system() == "Windows":
+            return self._bootstrap_windows_pip()
+        return None
+
+    def _bootstrap_windows_pip(self) -> list[str] | None:
+        py_dir = self._deps_dir.parent / "_python"
+        py_exe = py_dir / "python.exe"
+
+        if py_exe.exists():
+            return [str(py_exe), "-m", "pip"]
+
+        try:
+            import urllib.request
+            import zipfile
+
+            py_dir.mkdir(parents=True, exist_ok=True)
+
+            ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            arch = "amd64" if platform.machine().endswith("64") else "win32"
+            url = (
+                f"https://www.python.org/ftp/python/{ver}/"
+                f"python-{ver}-embed-{arch}.zip"
+            )
+            zip_path = py_dir / "python.zip"
+            self.progress.emit("Downloading Python runtime (~15 MB)…")
+            urllib.request.urlretrieve(url, zip_path)
+
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(py_dir)
+            zip_path.unlink()
+
+            for pth in py_dir.glob("python*._pth"):
+                text = pth.read_text()
+                pth.write_text(text.replace("#import site", "import site"))
+
+            self.progress.emit("Setting up pip…")
+            get_pip = py_dir / "get-pip.py"
+            urllib.request.urlretrieve(
+                "https://bootstrap.pypa.io/get-pip.py", get_pip,
+            )
+            subprocess.run(
+                [str(py_exe), str(get_pip)],
+                capture_output=True, timeout=300,
+            )
+            get_pip.unlink(missing_ok=True)
+
+            if py_exe.exists():
+                return [str(py_exe), "-m", "pip"]
+        except Exception:
+            pass
+        return None

@@ -898,8 +898,35 @@ class _HDDepsInstallWorker(QThread):
                 )
                 return
 
-            if self._deps_dir and str(self._deps_dir) not in sys.path:
-                sys.path.insert(0, str(self._deps_dir))
+            import importlib
+            import site
+            if self._deps_dir:
+                site.addsitedir(str(self._deps_dir))
+            importlib.invalidate_caches()
+
+            self.progress.emit("Verifying imports…")
+            failed = {}
+            for mod in ("torch", "transformers", "qwen_tts",
+                         "huggingface_hub"):
+                try:
+                    __import__(mod)
+                    log(f"import {mod}: OK")
+                except Exception as e:
+                    log(f"import {mod}: {type(e).__name__}: {e}")
+                    failed[mod] = f"{type(e).__name__}: {e}"
+
+            if failed:
+                details = "\n".join(
+                    f"  {m}: {e}" for m, e in failed.items()
+                )
+                log_note = ""
+                if log_path:
+                    log_note = f"\n\nSee {log_path}"
+                self.error.emit(
+                    f"Packages installed but imports failed:\n"
+                    f"{details}{log_note}"
+                )
+                return
 
             self.finished.emit()
         except subprocess.TimeoutExpired:

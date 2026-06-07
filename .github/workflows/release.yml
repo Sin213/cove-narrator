@@ -129,17 +129,18 @@ jobs:
           files: release/*
           fail_on_unmatched_files: true
           body: |
-            ## What's New in v2.1.0
+            ## What's New in v2.1.1
 
-            ### HD Voice Clone — now works on Linux
-            - **One-click HD setup on Linux** — HD dependencies install to `~/.local/share/cove-narrator/hd-deps/` automatically, bypassing PEP 668 restrictions on modern distros (Arch, Ubuntu 24.04+, Fedora 39+).
-            - **Smooth download progress** — both the dependency install (~5 GB) and the Qwen3-TTS model download (4.3 GB) now show real-time percentage, ETA, and MB counters instead of sitting silent.
-            - **Full sentences, no cutoff** — synthesis now uses the model's recommended generation parameters so audio plays to the end without truncating the last word.
+            Patch release fixing HD Voice Clone on Windows portable builds.
 
-            ### Windows improvements
-            - **USB-portable model storage** — the Qwen3-TTS model is stored next to the portable exe so the entire app travels on a USB drive.
-            - **Light theme fix** — scroll areas now force dark backgrounds so the UI stays consistent on Windows light themes.
-            - **Download stability** — model downloads run in a QThread to prevent Qt event-loop crashes, and the portable build shells out to its bundled Python for reliable pip installs.
+            ### Fixes
+            - **HD model download no longer hangs** — the portable exe now shells out to its bundled Python for `snapshot_download`, fixing the freeze that occurred when downloading the 4.3 GB Qwen3-TTS model in-process from PyInstaller.
+            - **No more crash after download** — progress monitoring moved into the QThread instead of a bare `threading.Thread`, preventing a Qt6Core.dll crash caused by emitting signals from a non-Qt thread.
+            - **qwen-tts bundled into the app** — the `qwen-tts` package (826 KB) is now vendored directly, eliminating a pip install that dragged in ~500 MB of unnecessary dependencies (gradio, sox, torchaudio) and failed on fresh Windows machines.
+            - **Dark theme on Windows light mode** — scroll areas in the voice picker and phoneme panel now force dark backgrounds instead of inheriting the Windows system theme.
+            - **Fully USB-portable** — the HD model downloads to `dependencies/models/` next to the exe, so the entire app + deps + model can live on a USB drive.
+
+            Thank you to Whooshy for reporting the download bug!
 
             ### Downloads
 

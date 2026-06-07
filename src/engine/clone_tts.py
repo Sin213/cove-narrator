@@ -58,7 +58,11 @@ class QwenCloneEngine:
 
     @staticmethod
     def model_dir() -> Path:
-        d = Path.home() / ".config" / "cove-narrator" / "models" / "qwen3-tts-1.7b"
+        import sys
+        if getattr(sys, 'frozen', False):
+            d = Path(sys.executable).parent / "dependencies" / "models" / "qwen3-tts-1.7b"
+        else:
+            d = Path.home() / ".config" / "cove-narrator" / "models" / "qwen3-tts-1.7b"
         d.mkdir(parents=True, exist_ok=True)
         return d
 

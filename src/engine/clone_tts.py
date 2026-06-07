@@ -71,7 +71,6 @@ class QwenCloneEngine:
     def download(self, progress_cb=None):
         import threading
         import time as _time
-        from huggingface_hub import snapshot_download
 
         ESTIMATED_BYTES = 4_300_000_000
         model_dir = self.model_dir()
@@ -106,12 +105,59 @@ class QwenCloneEngine:
             threading.Thread(target=_monitor, daemon=True).start()
 
         try:
-            snapshot_download(self._MODEL_REPO, local_dir=str(model_dir))
+            self._run_download(str(model_dir))
         finally:
             stop.set()
 
         if progress_cb:
             progress_cb("Download complete.")
+
+    def _run_download(self, model_dir: str):
+        import sys
+        if getattr(sys, 'frozen', False):
+            self._run_download_subprocess(model_dir)
+        else:
+            import os
+            os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
+            os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+            from huggingface_hub import snapshot_download
+            snapshot_download(self._MODEL_REPO, local_dir=model_dir)
+
+    def _run_download_subprocess(self, model_dir: str):
+        import subprocess
+        import sys
+        import platform
+
+        py_exe = Path(sys.executable).parent / "dependencies" / "_python" / "python.exe"
+        if not py_exe.exists():
+            raise RuntimeError(
+                f"Portable Python not found at {py_exe}. "
+                "Cannot download model in frozen environment."
+            )
+
+        deps_dir = Path(sys.executable).parent / "dependencies" / "cove-narrator"
+        script = (
+            "import sys, os;"
+            f"sys.path.insert(0, {str(deps_dir)!r});"
+            "os.environ['HF_HUB_ENABLE_HF_TRANSFER']='0';"
+            "os.environ['HF_HUB_DISABLE_XET']='1';"
+            "from huggingface_hub import snapshot_download;"
+            f"snapshot_download({self._MODEL_REPO!r}, local_dir={model_dir!r})"
+        )
+
+        kw = {}
+        if platform.system() == "Windows":
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+        proc = subprocess.run(
+            [str(py_exe), "-c", script],
+            capture_output=True, text=True, timeout=7200, **kw,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"Model download failed (exit {proc.returncode}):\n"
+                f"{proc.stderr[-500:] if proc.stderr else proc.stdout[-500:]}"
+            )
 
     def load(self, progress_cb=None):
         if self._model is not None:

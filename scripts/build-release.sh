@@ -61,7 +61,7 @@ echo "==> Running PyInstaller"
     --name "$APP_NAME" \
     --paths . \
     --collect-submodules src \
-    --collect-data src.vendor.qwen_tts \
+    --add-data "src/vendor/qwen_tts/core/tokenizer_25hz/vq/assets:src/vendor/qwen_tts/core/tokenizer_25hz/vq/assets" \
     --collect-data kokoro_onnx \
     --collect-data phonemizer \
     --collect-data language_tags \

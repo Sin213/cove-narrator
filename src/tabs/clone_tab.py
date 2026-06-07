@@ -585,7 +585,7 @@ class CloneTab(QWidget):
         _ensure_hd_deps_on_path()
         missing = []
         import_errors = {}
-        for mod in ("torch", "transformers", "qwen_tts", "huggingface_hub"):
+        for mod in ("torch", "transformers", "huggingface_hub"):
             try:
                 __import__(mod)
             except Exception as e:
@@ -774,7 +774,7 @@ class _HDDepsInstallWorker(QThread):
     progress = Signal(str)
     error = Signal(str)
 
-    HD_PACKAGES = ["torch", "transformers", "qwen-tts", "huggingface-hub"]
+    HD_PACKAGES = ["torch", "transformers", "huggingface-hub"]
     ESTIMATED_TOTAL_MB = 5000
 
     def __init__(self, deps_dir: Path | None):
@@ -868,8 +868,7 @@ class _HDDepsInstallWorker(QThread):
 
             self.progress.emit("Verifying imports…")
             failed = {}
-            for mod in ("torch", "transformers", "qwen_tts",
-                         "huggingface_hub"):
+            for mod in ("torch", "transformers", "huggingface_hub"):
                 try:
                     __import__(mod)
                 except Exception as e:

@@ -61,6 +61,7 @@ echo "==> Running PyInstaller"
     --name "$APP_NAME" \
     --paths . \
     --collect-submodules src \
+    --collect-data src.vendor.qwen_tts \
     --collect-data kokoro_onnx \
     --collect-data phonemizer \
     --collect-data language_tags \

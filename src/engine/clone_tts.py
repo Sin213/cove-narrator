@@ -207,7 +207,7 @@ class QwenCloneEngine:
         if self._model is not None:
             return
         import torch
-        from qwen_tts import Qwen3TTSModel
+        from src.vendor.qwen_tts import Qwen3TTSModel
         if progress_cb:
             progress_cb("Loading Qwen3-TTS 1.7B…")
         kwargs = {}

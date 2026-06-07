@@ -68,6 +68,7 @@ $commonArgs = @(
     '--icon', 'build\icon.ico',
     '--paths', '.',
     '--collect-submodules', 'src',
+    '--collect-data', 'src.vendor.qwen_tts',
     '--collect-data', 'kokoro_onnx',
     '--collect-data', 'phonemizer',
     '--collect-data', 'language_tags',
@@ -113,6 +114,7 @@ $portableName = "$App-portable"
     --icon build\icon.ico `
     --paths . `
     --collect-submodules src `
+    --collect-data src.vendor.qwen_tts `
     --collect-data kokoro_onnx `
     --collect-data phonemizer `
     --collect-data language_tags `

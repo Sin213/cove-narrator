@@ -1,6 +1,10 @@
+import os
 import site
 import sys
 from pathlib import Path
+
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+os.environ["HF_HUB_DISABLE_XET"] = "1"
 
 if getattr(sys, 'frozen', False):
     _base = Path(sys.executable).parent

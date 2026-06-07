@@ -583,27 +583,28 @@ class CloneTab(QWidget):
             self._play_hd_clone()
             return
 
-        from PySide6.QtWidgets import QMessageBox
-        dlg = QMessageBox(self)
-        dlg.setWindowTitle("HD Voice Clone")
-        dlg.setIcon(QMessageBox.Information)
-        dlg.setText("Download the HD voice cloning model?")
-        dlg.setInformativeText(
-            "This downloads Qwen3-TTS 1.7B (4.3 GB) for higher-quality "
-            "neural voice cloning.\n\n"
-            "Requirements:\n"
-            "• NVIDIA GPU (4+ GB VRAM)\n"
-            "• ~4.3 GB disk space\n\n"
-            "The Voice Match mode above works without this download — "
-            "HD Clone is optional for users who want closer voice similarity."
-        )
-        dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        dlg.button(QMessageBox.Ok).setText("Download (4.3 GB)")
-        if dlg.exec() != QMessageBox.Ok:
-            return
+        if not _after_install:
+            from PySide6.QtWidgets import QMessageBox
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle("HD Voice Clone")
+            dlg.setIcon(QMessageBox.Information)
+            dlg.setText("Download the HD voice cloning model?")
+            dlg.setInformativeText(
+                "This downloads Qwen3-TTS 1.7B (4.3 GB) for higher-quality "
+                "neural voice cloning.\n\n"
+                "Requirements:\n"
+                "• NVIDIA GPU (4+ GB VRAM)\n"
+                "• ~4.3 GB disk space\n\n"
+                "The Voice Match mode above works without this download — "
+                "HD Clone is optional for users who want closer voice similarity."
+            )
+            dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            dlg.button(QMessageBox.Ok).setText("Download (4.3 GB)")
+            if dlg.exec() != QMessageBox.Ok:
+                return
 
         self._hd_btn.setEnabled(False)
-        self._hd_status.setText("Downloading… This may take a while.")
+        self._hd_status.setText("Downloading Qwen3-TTS model…")
         self._hd_download_worker = _HDDownloadWorker(qwen)
         self._hd_download_worker.progress.connect(lambda msg: self._hd_status.setText(msg))
         self._hd_download_worker.finished.connect(self._on_hd_download_done)

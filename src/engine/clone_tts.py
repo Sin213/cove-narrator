@@ -69,9 +69,12 @@ class QwenCloneEngine:
         return self._model is not None
 
     def download(self, progress_cb=None):
+        import os
         import threading
         import time as _time
         from huggingface_hub import snapshot_download
+
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 
         ESTIMATED_BYTES = 4_300_000_000
         model_dir = self.model_dir()

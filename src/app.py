@@ -335,7 +335,7 @@ class MainWindow(QMainWindow):
         root.addWidget(main, 1)
 
         self.resize(self._config.get("window_width", 1050),
-                    self._config.get("window_height", 680))
+                    self._config.get("window_height", 600))
         self._apply_config()
         self._setup_shortcuts()
         self._set_mode(0)

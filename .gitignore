@@ -10,3 +10,4 @@ build/tmp/
 data/models/*.onnx
 data/models/*.bin
 .superpowers/
+handoff.md

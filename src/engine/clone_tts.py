@@ -69,64 +69,28 @@ class QwenCloneEngine:
         return self._model is not None
 
     def download(self, progress_cb=None):
-        import threading
-        import time as _time
-
-        ESTIMATED_BYTES = 4_300_000_000
-        model_dir = self.model_dir()
-        stop = threading.Event()
-
-        def _monitor():
-            start = _time.monotonic()
-            while not stop.wait(3):
-                try:
-                    total = sum(
-                        f.stat().st_size
-                        for f in model_dir.rglob("*") if f.is_file()
-                    )
-                except OSError:
-                    continue
-                mb = total / 1_000_000
-                pct = min(99, int(total / ESTIMATED_BYTES * 100))
-                elapsed = _time.monotonic() - start
-                if pct > 1 and elapsed > 5:
-                    eta_sec = elapsed / pct * (100 - pct)
-                    eta_min = max(1, int(eta_sec / 60))
-                    progress_cb(
-                        f"Downloading… {pct}%  —  "
-                        f"ETA ~{eta_min} min  "
-                        f"({mb:.0f} / ~4300 MB)"
-                    )
-                else:
-                    progress_cb(f"Downloading… ({mb:.0f} MB)")
-
+        import sys
         if progress_cb:
             progress_cb("Starting Qwen3-TTS download…")
-            threading.Thread(target=_monitor, daemon=True).start()
-
-        try:
-            self._run_download(str(model_dir))
-        finally:
-            stop.set()
-
+        if getattr(sys, 'frozen', False):
+            self._download_subprocess(progress_cb)
+        else:
+            self._download_direct(progress_cb)
         if progress_cb:
             progress_cb("Download complete.")
 
-    def _run_download(self, model_dir: str):
-        import sys
-        if getattr(sys, 'frozen', False):
-            self._run_download_subprocess(model_dir)
-        else:
-            import os
-            os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
-            os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
-            from huggingface_hub import snapshot_download
-            snapshot_download(self._MODEL_REPO, local_dir=model_dir)
+    def _download_direct(self, progress_cb=None):
+        import os
+        os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
+        os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+        from huggingface_hub import snapshot_download
+        snapshot_download(self._MODEL_REPO, local_dir=str(self.model_dir()))
 
-    def _run_download_subprocess(self, model_dir: str):
+    def _download_subprocess(self, progress_cb=None):
         import subprocess
         import sys
         import platform
+        import time as _time
 
         py_exe = Path(sys.executable).parent / "dependencies" / "_python" / "python.exe"
         if not py_exe.exists():
@@ -135,6 +99,7 @@ class QwenCloneEngine:
                 "Cannot download model in frozen environment."
             )
 
+        model_dir = self.model_dir()
         deps_dir = Path(sys.executable).parent / "dependencies" / "cove-narrator"
         script = (
             "import sys, os;"
@@ -142,21 +107,50 @@ class QwenCloneEngine:
             "os.environ['HF_HUB_ENABLE_HF_TRANSFER']='0';"
             "os.environ['HF_HUB_DISABLE_XET']='1';"
             "from huggingface_hub import snapshot_download;"
-            f"snapshot_download({self._MODEL_REPO!r}, local_dir={model_dir!r})"
+            f"snapshot_download({self._MODEL_REPO!r}, local_dir={str(model_dir)!r})"
         )
 
         kw = {}
         if platform.system() == "Windows":
             kw["creationflags"] = subprocess.CREATE_NO_WINDOW
 
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             [str(py_exe), "-c", script],
-            capture_output=True, text=True, timeout=7200, **kw,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kw,
         )
+
+        ESTIMATED_BYTES = 4_300_000_000
+        start = _time.monotonic()
+        while proc.poll() is None:
+            _time.sleep(3)
+            if not progress_cb:
+                continue
+            try:
+                total = sum(
+                    f.stat().st_size
+                    for f in model_dir.rglob("*") if f.is_file()
+                )
+            except OSError:
+                continue
+            mb = total / 1_000_000
+            pct = min(99, int(total / ESTIMATED_BYTES * 100))
+            elapsed = _time.monotonic() - start
+            if pct > 1 and elapsed > 5:
+                eta_sec = elapsed / pct * (100 - pct)
+                eta_min = max(1, int(eta_sec / 60))
+                progress_cb(
+                    f"Downloading… {pct}%  —  "
+                    f"ETA ~{eta_min} min  "
+                    f"({mb:.0f} / ~4300 MB)"
+                )
+            else:
+                progress_cb(f"Downloading… ({mb:.0f} MB)")
+
         if proc.returncode != 0:
+            stderr = proc.stderr.read().decode(errors="replace")
             raise RuntimeError(
                 f"Model download failed (exit {proc.returncode}):\n"
-                f"{proc.stderr[-500:] if proc.stderr else proc.stdout[-500:]}"
+                f"{stderr[-500:]}"
             )
 
     def load(self, progress_cb=None):

@@ -60,7 +60,6 @@ jobs:
           name: linux-appimage
           path: |
             release/*.AppImage
-            release/*.AppImage.sha256
           if-no-files-found: error
 
       - name: Upload .deb
@@ -69,29 +68,7 @@ jobs:
           name: linux-deb
           path: |
             release/*.deb
-            release/*.deb.sha256
           if-no-files-found: error
-
-      - name: Attach to GitHub Release
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            release/*.AppImage
-            release/*.AppImage.sha256
-            release/*.deb
-            release/*.deb.sha256
-          fail_on_unmatched_files: true
-          body: |
-            ## What's New in v2.0.0
-
-            - **Clone tab** — drop a voice clip or record yourself, and Cove auto-analyzes the reference to find the closest Kokoro voice blend. Pitch, speed, and depth sliders auto-populate so you can fine-tune the match. Save cloned voices as presets usable across all tabs.
-            - **HD neural cloning (optional)** — for users who want closer voice similarity, an optional 4.3 GB model download (Qwen3-TTS 1.7B) adds neural voice cloning. Requires an NVIDIA GPU.
-            - **Mic recording** — record reference audio directly in the app with a level meter and duration display.
-            - **Clone presets in voice gallery** — saved clone presets appear in the sidebar voice gallery alongside built-in voices and are restored on app restart.
-
-            Thank you to Whooshy for the voice cloning suggestions!
-          make_latest: true
 
   build-windows:
     needs: resolve-version
@@ -116,7 +93,6 @@ jobs:
           name: windows-setup
           path: |
             release/*-Setup.exe
-            release/*-Setup.exe.sha256
           if-no-files-found: error
 
       - name: Upload Portable exe
@@ -125,26 +101,57 @@ jobs:
           name: windows-portable
           path: |
             release/*-Portable.exe
-            release/*-Portable.exe.sha256
           if-no-files-found: error
 
+  publish-release:
+    if: github.ref_type == 'tag'
+    needs: [resolve-version, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.resolve-version.outputs.version }}
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release assets and generate checksum bundle
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*-Setup.exe' -o -name '*-Portable.exe' \) -exec cp {} release/ \;
+          cd release
+          sha256sum * > checksums-sha256.txt
+          cat checksums-sha256.txt
+
       - name: Attach to GitHub Release
-        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release/*-Setup.exe
-            release/*-Setup.exe.sha256
-            release/*-Portable.exe
-            release/*-Portable.exe.sha256
+          files: release/*
           fail_on_unmatched_files: true
           body: |
-            ## What's New in v2.0.0
+            ## What's New in v2.1.0
 
-            - **Clone tab** — drop a voice clip or record yourself, and Cove auto-analyzes the reference to find the closest Kokoro voice blend. Pitch, speed, and depth sliders auto-populate so you can fine-tune the match. Save cloned voices as presets usable across all tabs.
-            - **HD neural cloning (optional)** — for users who want closer voice similarity, an optional 4.3 GB model download (Qwen3-TTS 1.7B) adds neural voice cloning. Requires an NVIDIA GPU.
-            - **Mic recording** — record reference audio directly in the app with a level meter and duration display.
-            - **Clone presets in voice gallery** — saved clone presets appear in the sidebar voice gallery alongside built-in voices and are restored on app restart.
+            ### HD Voice Clone — now works on Linux
+            - **One-click HD setup on Linux** — HD dependencies install to `~/.local/share/cove-narrator/hd-deps/` automatically, bypassing PEP 668 restrictions on modern distros (Arch, Ubuntu 24.04+, Fedora 39+).
+            - **Smooth download progress** — both the dependency install (~5 GB) and the Qwen3-TTS model download (4.3 GB) now show real-time percentage, ETA, and MB counters instead of sitting silent.
+            - **Full sentences, no cutoff** — synthesis now uses the model's recommended generation parameters so audio plays to the end without truncating the last word.
 
-            Thank you to Whooshy for the voice cloning suggestions!
+            ### Windows improvements
+            - **USB-portable model storage** — the Qwen3-TTS model is stored next to the portable exe so the entire app travels on a USB drive.
+            - **Light theme fix** — scroll areas now force dark backgrounds so the UI stays consistent on Windows light themes.
+            - **Download stability** — model downloads run in a QThread to prevent Qt event-loop crashes, and the portable build shells out to its bundled Python for reliable pip installs.
+
+            ### Downloads
+
+            | File | Platform | Type |
+            |------|----------|------|
+            | `Cove-Narrator-${{ env.VERSION }}-Setup.exe` | Windows | Installer |
+            | `Cove-Narrator-${{ env.VERSION }}-Portable.exe` | Windows | Single-file portable |
+            | `cove-narrator-${{ env.VERSION }}.AppImage` | Linux | Portable (any distro) |
+            | `cove-narrator_${{ env.VERSION }}_amd64.deb` | Linux | Debian/Ubuntu package |
+
+            Verify downloads with `checksums-sha256.txt`:
+            ```
+            sha256sum -c checksums-sha256.txt
+            ```
           make_latest: true

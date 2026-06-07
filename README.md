@@ -2,9 +2,22 @@
 
 ![Cove Narrator](docs/cove-narator.png)
 
-Fully offline text-to-speech desktop app with voice blending, phoneme-level pronunciation control, and document reading. Built on [Kokoro ONNX](https://github.com/thewh1teagle/kokoro-onnx) — all processing runs locally on your machine. No accounts, no API keys, no network required after setup.
+Fully offline text-to-speech desktop app with voice blending, phoneme-level pronunciation control, voice cloning, and document reading. Built on [Kokoro ONNX](https://github.com/thewh1teagle/kokoro-onnx) with optional [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base) for HD neural cloning — all processing runs locally on your machine. No accounts, no API keys, no network required after setup.
 
 Cross-platform: **Linux** and **Windows**. Same codebase, same features on both.
+
+## Downloads
+
+Pre-built releases for every platform — no Python needed:
+
+| Platform | Format | Description |
+|----------|--------|-------------|
+| Windows | [Setup.exe](https://github.com/Sin213/cove-narrator/releases/latest) | Standard installer |
+| Windows | [Portable.exe](https://github.com/Sin213/cove-narrator/releases/latest) | Single-file, runs from USB |
+| Linux | [AppImage](https://github.com/Sin213/cove-narrator/releases/latest) | Portable, works on any distro |
+| Linux | [.deb](https://github.com/Sin213/cove-narrator/releases/latest) | Debian/Ubuntu package |
+
+All releases include `checksums-sha256.txt` for verification.
 
 ## Features
 
@@ -22,6 +35,13 @@ Cross-platform: **Linux** and **Windows**. Same codebase, same features on both.
 - **Voice blending** — Drop a reference clip and Cove finds the optimal mix of built-in voices to match its pitch (e.g. 70% Onyx + 30% Echo). Save blends by name and reuse them across sessions.
 - **Voice cloning** — Analyze any voice clip to auto-match the closest Kokoro blend with tunable sliders. Save cloned voices as presets. Optional HD neural cloning for higher fidelity (separate download).
 
+**HD Voice Clone (optional):**
+
+- One-click install of HD dependencies (~5 GB) and Qwen3-TTS model (4.3 GB)
+- Real-time download progress with percentage, ETA, and size counters
+- Requires NVIDIA GPU with 4+ GB VRAM
+- Works on both Linux and Windows, including portable/frozen builds
+
 **Audio:**
 
 - Pitch, speed, and depth sliders with color-coded pips
@@ -35,19 +55,19 @@ Cross-platform: **Linux** and **Windows**. Same codebase, same features on both.
 - Custom frameless titlebar with min/max/close controls
 - Sidebar layout with mode navigation, voice card, and presets
 
-## Requirements
+## Requirements (from source)
 
 - Python 3.10+
-- Kokoro model files (see [Setup](#setup))
+- Kokoro model files (see [Setup](#setup-from-source))
 - **Linux:** PulseAudio or PipeWire for audio output
 - **Windows:** No extra audio setup needed
 
-## Setup
+## Setup (from source)
 
 ### Linux
 
 ```bash
-git clone https://github.com/user/cove-narrator.git
+git clone https://github.com/Sin213/cove-narrator.git
 cd cove-narrator
 python3 -m venv .venv
 source .venv/bin/activate
@@ -57,7 +77,7 @@ pip install -r requirements.txt
 ### Windows
 
 ```powershell
-git clone https://github.com/user/cove-narrator.git
+git clone https://github.com/Sin213/cove-narrator.git
 cd cove-narrator
 python -m venv .venv
 .venv\Scripts\activate
@@ -88,27 +108,6 @@ python -m src.main
 .venv\Scripts\activate
 python -m src.main
 ```
-
-## Build standalone executable
-
-The PyInstaller spec bundles models, voices, and the CMU dictionary into a single distributable folder.
-
-### Linux
-
-```bash
-bash build/build.sh
-# Output: dist/cove-narrator/cove-narrator
-```
-
-### Windows
-
-```powershell
-.venv\Scripts\pip install pyinstaller
-.venv\Scripts\pyinstaller build\pyinstaller\cove-narrator.spec --distpath dist\ --workpath build\tmp --clean
-# Output: dist\cove-narrator\cove-narrator.exe
-```
-
-The `dist/cove-narrator/` folder is fully portable — copy it anywhere and run.
 
 ## Project structure
 
@@ -154,10 +153,10 @@ cove-narrator/
 
 ## Config paths
 
-| Platform | Config | Presets | Custom voices | Exports |
-|----------|--------|---------|---------------|---------|
-| Linux | `~/.config/cove-narrator/config.json` | `~/.config/cove-narrator/presets/` | `~/.config/cove-narrator/voices/` | `~/Music/Cove Narrator/` |
-| Windows | `%USERPROFILE%\.config\cove-narrator\config.json` | `%USERPROFILE%\.config\cove-narrator\presets\` | `%USERPROFILE%\.config\cove-narrator\voices\` | `%USERPROFILE%\Music\Cove Narrator\` |
+| Platform | Config | Presets | Custom voices | HD deps | Exports |
+|----------|--------|---------|---------------|---------|---------|
+| Linux | `~/.config/cove-narrator/config.json` | `~/.config/cove-narrator/presets/` | `~/.config/cove-narrator/voices/` | `~/.local/share/cove-narrator/hd-deps/` | `~/Music/Cove Narrator/` |
+| Windows | `%USERPROFILE%\.config\cove-narrator\config.json` | `%USERPROFILE%\.config\cove-narrator\presets\` | `%USERPROFILE%\.config\cove-narrator\voices\` | Next to executable | `%USERPROFILE%\Music\Cove Narrator\` |
 
 Users upgrading from Whooshy: existing config and presets are automatically migrated on first launch.
 

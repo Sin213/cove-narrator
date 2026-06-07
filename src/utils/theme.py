@@ -312,4 +312,8 @@ QInputDialog { background: #0e0e16; }
 #voiceTile {
     background: #13131b; border: 1px solid rgba(255,255,255,15); border-radius: 12px;
 }
+
+/* Force dark backgrounds on scroll areas and their viewports */
+QScrollArea { background: transparent; border: none; }
+QScrollArea > QWidget > QWidget { background: transparent; }
 """

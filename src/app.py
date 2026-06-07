@@ -233,7 +233,7 @@ class VoiceGalleryDialog(QDialog):
         top.addWidget(av)
         nc = QVBoxLayout()
         nc.setSpacing(1)
-        nc.addWidget(QLabel(name, styleSheet="font-weight: 600;"))
+        nc.addWidget(QLabel(name, objectName="voiceName"))
         nc.addWidget(QLabel(desc, objectName="voiceDesc"))
         top.addLayout(nc)
         top.addStretch()

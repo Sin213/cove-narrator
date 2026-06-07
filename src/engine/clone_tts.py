@@ -85,10 +85,56 @@ class QwenCloneEngine:
 
     def _download_direct(self, progress_cb=None):
         import os
+        import threading
+        import time as _time
+
         os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
         os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
         from huggingface_hub import snapshot_download
-        snapshot_download(self._MODEL_REPO, local_dir=str(self.model_dir()))
+
+        model_dir = self.model_dir()
+        error_holder = [None]
+
+        def _do_download():
+            try:
+                snapshot_download(
+                    self._MODEL_REPO, local_dir=str(model_dir),
+                )
+            except Exception as e:
+                error_holder[0] = e
+
+        dl_thread = threading.Thread(target=_do_download, daemon=True)
+        dl_thread.start()
+
+        ESTIMATED_BYTES = 4_300_000_000
+        start = _time.monotonic()
+        while dl_thread.is_alive():
+            dl_thread.join(timeout=2.0)
+            if not progress_cb or not model_dir.is_dir():
+                continue
+            try:
+                total = sum(
+                    f.stat().st_size
+                    for f in model_dir.rglob("*") if f.is_file()
+                )
+            except OSError:
+                continue
+            mb = total / 1_000_000
+            pct = min(99, int(total / ESTIMATED_BYTES * 100))
+            elapsed = _time.monotonic() - start
+            if pct > 1 and elapsed > 5:
+                eta_sec = elapsed / pct * (100 - pct)
+                eta_min = max(1, int(eta_sec / 60))
+                progress_cb(
+                    f"Downloading… {pct}%  —  "
+                    f"ETA ~{eta_min} min  "
+                    f"({mb:.0f} / ~4300 MB)"
+                )
+            else:
+                progress_cb(f"Downloading… ({mb:.0f} MB)")
+
+        if error_holder[0] is not None:
+            raise error_holder[0]
 
     def _download_subprocess(self, progress_cb=None):
         import subprocess
@@ -183,9 +229,6 @@ class QwenCloneEngine:
             ref_audio=ref_audio_path, ref_text="unused",
             x_vector_only_mode=True,
             non_streaming_mode=True,
-            temperature=0.3, top_p=0.85, top_k=20,
-            repetition_penalty=1.0,
-            max_new_tokens=2048,
         )
         audio = wavs[0]
         if not isinstance(audio, np.ndarray):

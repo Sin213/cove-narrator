@@ -30,6 +30,28 @@ from src.utils.export import export_wav
 SUPPORTED_FORMATS = (".mp3", ".wav", ".flac", ".ogg", ".m4a", ".opus", ".wma")
 
 
+def _hd_deps_dir() -> Path | None:
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent / "dependencies" / "cove-narrator"
+    if platform.system() == "Linux":
+        xdg = os.environ.get(
+            "XDG_DATA_HOME", str(Path.home() / ".local" / "share")
+        )
+        return Path(xdg) / "cove-narrator" / "hd-deps"
+    return None
+
+
+def _ensure_hd_deps_on_path():
+    import site
+    deps_dir = _hd_deps_dir()
+    if deps_dir and deps_dir.is_dir():
+        deps = str(deps_dir)
+        if deps in sys.path:
+            sys.path.remove(deps)
+        sys.path.insert(0, deps)
+        site.addsitedir(deps)
+
+
 class _AnalyzeWorker(QThread):
     finished = Signal(object)
     progress = Signal(str)
@@ -560,18 +582,26 @@ class CloneTab(QWidget):
     # -- HD Neural Clone (optional download) --
 
     def _on_hd_action(self, _after_install=False):
+        _ensure_hd_deps_on_path()
         missing = []
+        import_errors = {}
         for mod in ("torch", "transformers", "qwen_tts", "huggingface_hub"):
             try:
                 __import__(mod)
-            except Exception:
+            except Exception as e:
                 missing.append(mod.replace("_", "-"))
+                import_errors[mod] = f"{type(e).__name__}: {e}"
         if missing:
             if _after_install:
+                for mod, err in import_errors.items():
+                    print(f"[HD deps] {mod}: {err}", file=sys.stderr)
+                hint = (
+                    "Try installing Python 3.12 from python.org."
+                    if platform.system() == "Windows"
+                    else "Check the terminal for error details."
+                )
                 self._hd_status.setText(
-                    f"Still missing after install: {', '.join(missing)}. "
-                    "The installed packages may not be compatible with "
-                    "this build. Try installing Python 3.12 from python.org."
+                    f"Still missing after install: {', '.join(missing)}. {hint}"
                 )
                 return
             self._offer_hd_deps_install(missing)
@@ -625,11 +655,9 @@ class CloneTab(QWidget):
             "  - NVIDIA GPU with 4+ GB VRAM\n"
             "  - ~5 GB disk space\n\n"
         )
-        if is_frozen:
-            detail += (
-                "Packages will be installed to 'dependencies\\cove-narrator'\n"
-                "next to the app executable."
-            )
+        deps_dir = _hd_deps_dir()
+        if deps_dir:
+            detail += f"Packages will be installed to:\n  {deps_dir}"
         else:
             detail += "Packages will be installed to your Python environment."
         dlg.setInformativeText(detail)
@@ -638,9 +666,7 @@ class CloneTab(QWidget):
         if dlg.exec() != QMessageBox.Ok:
             return
 
-        deps_dir = None
-        if is_frozen:
-            deps_dir = Path(sys.executable).parent / "dependencies" / "cove-narrator"
+        deps_dir = _hd_deps_dir()
 
         self._hd_btn.setEnabled(False)
         self._hd_status.setText("Installing HD dependencies…")
@@ -652,13 +678,7 @@ class CloneTab(QWidget):
 
     def _on_hd_deps_installed(self):
         import importlib
-        import site
-        if getattr(sys, 'frozen', False):
-            deps = str(
-                Path(sys.executable).parent / "dependencies" / "cove-narrator"
-            )
-            if deps not in sys.path:
-                site.addsitedir(deps)
+        _ensure_hd_deps_on_path()
         importlib.invalidate_caches()
         self._hd_btn.setEnabled(True)
         self._hd_status.setText("Dependencies installed!")
@@ -769,6 +789,8 @@ class _HDDepsInstallWorker(QThread):
         return kw
 
     def run(self):
+        import threading
+
         try:
             pip_cmd = self._find_pip()
             if not pip_cmd:
@@ -792,11 +814,18 @@ class _HDDepsInstallWorker(QThread):
                 text=True, bufsize=1, env=env, **self._popen_kwargs(),
             )
 
-            downloaded_mb = 0.0
-            pkg_count = 0
-            dl_count = 0
             start = time.monotonic()
-            _SIZE_RE = re.compile(r'\(([\d.]+)\s*(kB|MB|GB)\)')
+            self._phase = "Resolving"
+            self._pkg_count = 0
+            stop_monitor = threading.Event()
+
+            if self._deps_dir:
+                monitor = threading.Thread(
+                    target=self._disk_monitor,
+                    args=(start, stop_monitor),
+                    daemon=True,
+                )
+                monitor.start()
 
             while True:
                 line = proc.stdout.readline()
@@ -809,53 +838,16 @@ class _HDDepsInstallWorker(QThread):
                     continue
 
                 if line.startswith("Collecting"):
-                    pkg_count += 1
-                    pkg = line.split()[1].split(">")[0].split("<")[0].split("=")[0]
-                    self.progress.emit(
-                        f"Resolving: {pkg} ({pkg_count} packages)"
-                    )
-                elif "Downloading" in line:
-                    dl_count += 1
-                    m = _SIZE_RE.search(line)
-                    if m:
-                        size = float(m.group(1))
-                        unit = m.group(2)
-                        if unit == "kB":
-                            size /= 1024
-                        elif unit == "GB":
-                            size *= 1024
-                        downloaded_mb += size
-
-                    pct = min(95, int(
-                        downloaded_mb / self.ESTIMATED_TOTAL_MB * 100
-                    ))
-                    elapsed = time.monotonic() - start
-                    if pct > 2 and elapsed > 5:
-                        eta_sec = elapsed / pct * (100 - pct)
-                        eta_min = max(1, int(eta_sec / 60))
-                        self.progress.emit(
-                            f"Downloading… {pct}%  —  "
-                            f"ETA ~{eta_min} min  "
-                            f"({downloaded_mb:.0f} / ~{self.ESTIMATED_TOTAL_MB} MB)"
-                        )
-                    else:
-                        self.progress.emit(
-                            f"Downloading… ({downloaded_mb:.0f} MB)"
-                        )
-                elif "Using cached" in line:
-                    dl_count += 1
-                    self.progress.emit(
-                        f"Using cached packages… "
-                        f"({dl_count} of {pkg_count})"
-                    )
+                    self._pkg_count += 1
+                    self._phase = "Resolving"
+                elif "Downloading" in line or "Using cached" in line:
+                    self._phase = "Downloading"
                 elif line.startswith("Installing collected"):
-                    self.progress.emit(
-                        f"Installing {pkg_count} packages… "
-                        f"(this may take a minute)"
-                    )
+                    self._phase = "Installing"
                 elif line.startswith("Successfully installed"):
                     self.progress.emit("Installation complete!")
 
+            stop_monitor.set()
             proc.wait(timeout=3600)
 
             if proc.returncode != 0:
@@ -865,9 +857,8 @@ class _HDDepsInstallWorker(QThread):
                 return
 
             import importlib
-            import site
             if self._deps_dir:
-                site.addsitedir(str(self._deps_dir))
+                _ensure_hd_deps_on_path()
                 py_dir = self._deps_dir.parent / "_python"
                 if py_dir.is_dir():
                     for zf in py_dir.glob("python*.zip"):
@@ -898,6 +889,35 @@ class _HDDepsInstallWorker(QThread):
             self.error.emit("Installation timed out.")
         except Exception as e:
             self.error.emit(str(e))
+
+    def _disk_monitor(self, start_time, stop_event):
+        while not stop_event.wait(2.0):
+            if not self._deps_dir or not self._deps_dir.is_dir():
+                continue
+            try:
+                r = subprocess.run(
+                    ["du", "-sm", str(self._deps_dir)],
+                    capture_output=True, text=True, timeout=10,
+                    **self._popen_kwargs(),
+                )
+                actual_mb = float(r.stdout.split()[0])
+            except Exception:
+                continue
+            pct = min(95, int(actual_mb / self.ESTIMATED_TOTAL_MB * 100))
+            elapsed = time.monotonic() - start_time
+            if pct > 2 and elapsed > 10:
+                eta_sec = elapsed / pct * (100 - pct)
+                eta_min = max(1, int(eta_sec / 60))
+                self.progress.emit(
+                    f"{self._phase}… {pct}%  —  "
+                    f"ETA ~{eta_min} min  "
+                    f"({actual_mb:.0f} / ~{self.ESTIMATED_TOTAL_MB} MB)"
+                )
+            elif actual_mb > 0:
+                self.progress.emit(
+                    f"{self._phase}… "
+                    f"({actual_mb:.0f} / ~{self.ESTIMATED_TOTAL_MB} MB)"
+                )
 
     def _find_pip(self) -> list[str] | None:
         if not getattr(sys, 'frozen', False):

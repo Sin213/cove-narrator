@@ -798,8 +798,7 @@ class _HDDepsInstallWorker(QThread):
                 )
                 return
 
-            cmd = [*pip_cmd, "install",
-                   "--progress-bar", "off", "--ignore-installed"]
+            cmd = [*pip_cmd, "install", "--progress-bar", "off"]
             if self._deps_dir:
                 self._deps_dir.mkdir(parents=True, exist_ok=True)
                 cmd += ["--target", str(self._deps_dir)]

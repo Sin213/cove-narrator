@@ -99,6 +99,7 @@ class QwenCloneEngine:
             try:
                 snapshot_download(
                     self._MODEL_REPO, local_dir=str(model_dir),
+                    local_dir_use_symlinks=False,
                 )
             except Exception as e:
                 error_holder[0] = e
@@ -157,7 +158,8 @@ class QwenCloneEngine:
             "os.environ['HF_HUB_ENABLE_HF_TRANSFER']='0';"
             "os.environ['HF_HUB_DISABLE_XET']='1';"
             "from huggingface_hub import snapshot_download;"
-            f"snapshot_download({self._MODEL_REPO!r}, local_dir={str(model_dir)!r})"
+            f"snapshot_download({self._MODEL_REPO!r}, local_dir={str(model_dir)!r},"
+            " local_dir_use_symlinks=False)"
         )
 
         kw = {}

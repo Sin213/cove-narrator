@@ -789,8 +789,6 @@ class _HDDepsInstallWorker(QThread):
         return kw
 
     def run(self):
-        import threading
-
         try:
             pip_cmd = self._find_pip()
             if not pip_cmd:
@@ -811,43 +809,38 @@ class _HDDepsInstallWorker(QThread):
             env = {**os.environ, "PYTHONUNBUFFERED": "1"}
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, env=env, **self._popen_kwargs(),
+                **self._popen_kwargs(),
             )
 
             start = time.monotonic()
-            self._phase = "Resolving"
-            self._pkg_count = 0
-            stop_monitor = threading.Event()
+            phase = "Resolving"
+            last_progress = 0.0
 
-            if self._deps_dir:
-                monitor = threading.Thread(
-                    target=self._disk_monitor,
-                    args=(start, stop_monitor),
-                    daemon=True,
-                )
-                monitor.start()
+            while proc.poll() is None:
+                time.sleep(2)
+                if self._deps_dir and self._deps_dir.is_dir():
+                    try:
+                        actual_mb = sum(
+                            f.stat().st_size
+                            for f in self._deps_dir.rglob("*") if f.is_file()
+                        ) / 1_000_000
+                    except OSError:
+                        actual_mb = last_progress
+                    last_progress = actual_mb
+                    pct = min(95, int(actual_mb / self.ESTIMATED_TOTAL_MB * 100))
+                    elapsed = time.monotonic() - start
+                    if pct > 2 and elapsed > 10:
+                        eta_sec = elapsed / pct * (100 - pct)
+                        eta_min = max(1, int(eta_sec / 60))
+                        self.progress.emit(
+                            f"Installing… {pct}%  —  "
+                            f"ETA ~{eta_min} min  "
+                            f"({actual_mb:.0f} / ~{self.ESTIMATED_TOTAL_MB} MB)"
+                        )
+                    elif actual_mb > 0:
+                        self.progress.emit(
+                            f"Installing… ({actual_mb:.0f} MB)")
 
-            while True:
-                line = proc.stdout.readline()
-                if not line:
-                    if proc.poll() is not None:
-                        break
-                    continue
-                line = line.strip()
-                if not line:
-                    continue
-
-                if line.startswith("Collecting"):
-                    self._pkg_count += 1
-                    self._phase = "Resolving"
-                elif "Downloading" in line or "Using cached" in line:
-                    self._phase = "Downloading"
-                elif line.startswith("Installing collected"):
-                    self._phase = "Installing"
-                elif line.startswith("Successfully installed"):
-                    self.progress.emit("Installation complete!")
-
-            stop_monitor.set()
             proc.wait(timeout=3600)
 
             if proc.returncode != 0:
@@ -888,35 +881,6 @@ class _HDDepsInstallWorker(QThread):
             self.error.emit("Installation timed out.")
         except Exception as e:
             self.error.emit(str(e))
-
-    def _disk_monitor(self, start_time, stop_event):
-        while not stop_event.wait(2.0):
-            if not self._deps_dir or not self._deps_dir.is_dir():
-                continue
-            try:
-                r = subprocess.run(
-                    ["du", "-sm", str(self._deps_dir)],
-                    capture_output=True, text=True, timeout=10,
-                    **self._popen_kwargs(),
-                )
-                actual_mb = float(r.stdout.split()[0])
-            except Exception:
-                continue
-            pct = min(95, int(actual_mb / self.ESTIMATED_TOTAL_MB * 100))
-            elapsed = time.monotonic() - start_time
-            if pct > 2 and elapsed > 10:
-                eta_sec = elapsed / pct * (100 - pct)
-                eta_min = max(1, int(eta_sec / 60))
-                self.progress.emit(
-                    f"{self._phase}… {pct}%  —  "
-                    f"ETA ~{eta_min} min  "
-                    f"({actual_mb:.0f} / ~{self.ESTIMATED_TOTAL_MB} MB)"
-                )
-            elif actual_mb > 0:
-                self.progress.emit(
-                    f"{self._phase}… "
-                    f"({actual_mb:.0f} / ~{self.ESTIMATED_TOTAL_MB} MB)"
-                )
 
     def _find_pip(self) -> list[str] | None:
         if not getattr(sys, 'frozen', False):

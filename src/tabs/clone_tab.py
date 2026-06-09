@@ -774,7 +774,7 @@ class _HDDepsInstallWorker(QThread):
     progress = Signal(str)
     error = Signal(str)
 
-    HD_PACKAGES = ["torch==2.12.0", "transformers==5.10.2", "huggingface-hub==0.36.2"]
+    HD_PACKAGES = ["torch==2.12.0", "transformers==5.10.2", "huggingface-hub==1.18.0"]
     ESTIMATED_TOTAL_MB = 5000
 
     def __init__(self, deps_dir: Path | None):

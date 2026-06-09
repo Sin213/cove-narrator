@@ -774,8 +774,18 @@ class _HDDepsInstallWorker(QThread):
     progress = Signal(str)
     error = Signal(str)
 
-    HD_PACKAGES = ["torch==2.12.0", "transformers==5.10.2", "huggingface-hub==1.18.0"]
-    ESTIMATED_TOTAL_MB = 5000
+    HD_PACKAGES = [
+        "torch==2.12.0",
+        "transformers==5.10.2",
+        "huggingface-hub==1.18.0",
+        "numpy", "pyyaml", "regex", "safetensors", "tokenizers",
+        "tqdm", "packaging", "hf-xet", "httpx", "httpcore", "anyio",
+        "certifi", "h11", "idna", "typer", "click", "rich", "pygments",
+        "annotated-doc", "shellingham", "markdown-it-py", "mdurl",
+        "colorama", "filelock", "fsspec", "jinja2", "markupsafe",
+        "mpmath", "networkx", "setuptools", "sympy", "typing-extensions",
+    ]
+    ESTIMATED_TOTAL_MB = 800
 
     def __init__(self, deps_dir: Path | None):
         super().__init__()
@@ -798,7 +808,8 @@ class _HDDepsInstallWorker(QThread):
                 )
                 return
 
-            base_cmd = [*pip_cmd, "install", "--progress-bar", "off"]
+            base_cmd = [*pip_cmd, "install", "--progress-bar", "off",
+                        "--no-deps"]
             if self._deps_dir:
                 self._deps_dir.mkdir(parents=True, exist_ok=True)
                 base_cmd += ["--target", str(self._deps_dir)]
@@ -806,10 +817,13 @@ class _HDDepsInstallWorker(QThread):
             start = time.monotonic()
             last_progress = 0.0
 
-            for pkg_i, pkg in enumerate(self.HD_PACKAGES, 1):
+            all_pkgs = list(self.HD_PACKAGES)
+            total = len(all_pkgs)
+
+            for pkg_i, pkg in enumerate(all_pkgs, 1):
                 pkg_label = pkg.split("==")[0]
                 self.progress.emit(
-                    f"Installing {pkg_label} ({pkg_i}/{len(self.HD_PACKAGES)})…")
+                    f"Installing {pkg_label} ({pkg_i}/{total})…")
 
                 proc = subprocess.Popen(
                     [*base_cmd, pkg],

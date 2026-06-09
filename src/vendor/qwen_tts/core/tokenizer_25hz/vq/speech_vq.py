@@ -13,17 +13,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import sox
 import copy
 import torch
 import operator
-import onnxruntime
 
 import torch.nn as nn
 import torch.nn.functional as F
-import torchaudio.compliance.kaldi as kaldi
 
-from librosa.filters import mel as librosa_mel_fn
+try:
+    import sox
+except ImportError:
+    sox = None
+try:
+    import onnxruntime
+except ImportError:
+    onnxruntime = None
+try:
+    import torchaudio.compliance.kaldi as kaldi
+except ImportError:
+    kaldi = None
+try:
+    from librosa.filters import mel as librosa_mel_fn
+except ImportError:
+    librosa_mel_fn = None
 from itertools import accumulate
 from typing import List
 from torch import Tensor

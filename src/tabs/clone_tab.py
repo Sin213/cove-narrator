@@ -778,7 +778,7 @@ class _HDDepsInstallWorker(QThread):
         "torch==2.12.0",
         "transformers==5.10.2",
         "huggingface-hub==1.18.0",
-        "numpy", "pyyaml", "regex", "safetensors", "tokenizers",
+        "numpy", "pyyaml", "regex", "safetensors", "tokenizers==0.22.2",
         "tqdm", "packaging", "hf-xet", "httpx", "httpcore", "anyio",
         "certifi", "h11", "idna", "typer", "click", "rich", "pygments",
         "annotated-doc", "shellingham", "markdown-it-py", "mdurl",

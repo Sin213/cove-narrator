@@ -785,6 +785,7 @@ class _HDDepsInstallWorker(QThread):
         "colorama", "filelock", "fsspec", "jinja2", "markupsafe",
         "mpmath", "networkx", "setuptools", "sympy", "typing-extensions",
         "soundfile", "cffi", "pycparser",
+        "accelerate", "psutil",
     ]
     ESTIMATED_TOTAL_MB = 800
 

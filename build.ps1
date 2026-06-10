@@ -81,7 +81,6 @@ $commonArgs = @(
     '--hidden-import', 'onnxruntime',
     '--hidden-import', 'sounddevice',
     '--hidden-import', 'soundfile',
-    '--hidden-import', 'librosa',
     '--hidden-import', 'numpy',
     '--hidden-import', 'PySide6',
     '--hidden-import', 'pymupdf',
@@ -127,7 +126,6 @@ $portableName = "$App-portable"
     --hidden-import onnxruntime `
     --hidden-import sounddevice `
     --hidden-import soundfile `
-    --hidden-import librosa `
     --hidden-import numpy `
     --hidden-import PySide6 `
     --hidden-import pymupdf `

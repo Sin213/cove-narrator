@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
-import librosa
 import numpy as np
 import soundfile as sf
 import torch
@@ -215,7 +214,7 @@ class Qwen3TTSModel:
             with io.BytesIO(wav_bytes) as f:
                 audio, sr = sf.read(f, dtype="float32", always_2d=False)
         else:
-            audio, sr = librosa.load(x, sr=None, mono=True)
+            audio, sr = sf.read(x, dtype="float32", always_2d=False)
 
         if audio.ndim > 1:
             audio = np.mean(audio, axis=-1)
@@ -439,9 +438,11 @@ class Qwen3TTSModel:
 
             wav_resample = wav
             if sr != self.model.speaker_encoder_sample_rate:
-                wav_resample = librosa.resample(y=wav_resample.astype(np.float32), 
-                                           orig_sr=int(sr), 
-                                           target_sr=self.model.speaker_encoder_sample_rate)
+                t = torch.from_numpy(wav_resample.astype(np.float32)).unsqueeze(0).unsqueeze(0)
+                new_len = int(len(wav_resample) * self.model.speaker_encoder_sample_rate / sr)
+                wav_resample = torch.nn.functional.interpolate(
+                    t, size=new_len, mode="linear", align_corners=False
+                ).squeeze().numpy()
 
             spk_emb = self.model.extract_speaker_embedding(audio=wav_resample,
                                                            sr=self.model.speaker_encoder_sample_rate)

@@ -19,7 +19,6 @@ import urllib.request
 from typing import List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
-import librosa
 import numpy as np
 import soundfile as sf
 import torch
@@ -147,13 +146,17 @@ class Qwen3TTSTokenizer:
             with io.BytesIO(wav_bytes) as f:
                 audio, sr = sf.read(f, dtype="float32", always_2d=False)
         else:
-            audio, sr = librosa.load(x, sr=None, mono=True)
+            audio, sr = sf.read(x, dtype="float32", always_2d=False)
 
         if audio.ndim > 1:
             audio = np.mean(audio, axis=-1)
 
         if sr != target_sr:
-            audio = librosa.resample(y=audio, orig_sr=sr, target_sr=target_sr)
+            t = torch.from_numpy(audio.astype(np.float32)).unsqueeze(0).unsqueeze(0)
+            new_len = int(len(audio) * target_sr / sr)
+            audio = torch.nn.functional.interpolate(
+                t, size=new_len, mode="linear", align_corners=False
+            ).squeeze().numpy()
 
         return audio.astype(np.float32)
 
@@ -201,7 +204,11 @@ class Qwen3TTSTokenizer:
             if a.ndim > 1:
                 a = np.mean(a, axis=-1)
             if int(sr) != target_sr:
-                a = librosa.resample(y=a.astype(np.float32), orig_sr=int(sr), target_sr=target_sr)
+                t = torch.from_numpy(a.astype(np.float32)).unsqueeze(0).unsqueeze(0)
+                new_len = int(len(a) * target_sr / int(sr))
+                a = torch.nn.functional.interpolate(
+                    t, size=new_len, mode="linear", align_corners=False
+                ).squeeze().numpy()
             out.append(a.astype(np.float32))
         return out
 

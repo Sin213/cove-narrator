@@ -35,7 +35,10 @@ import typing as tp
 from random import randrange
 
 import numpy as np
-from einops import rearrange, repeat
+try:
+    from einops import rearrange, repeat
+except ImportError:
+    rearrange = repeat = None
 from math import ceil
 import torch
 from torch import nn

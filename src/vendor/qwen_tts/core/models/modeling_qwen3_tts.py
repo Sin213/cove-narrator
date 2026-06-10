@@ -22,7 +22,7 @@ from typing import Callable, Optional
 import huggingface_hub
 import torch
 from huggingface_hub import snapshot_download
-from librosa.filters import mel as librosa_mel_fn
+import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from transformers.activations import ACT2FN
@@ -393,6 +393,54 @@ class Qwen3TTSSpeakerEncoder(torch.nn.Module):
         return hidden_states
 
 
+def _hz_to_mel(freq):
+    freq = np.asarray(freq, dtype=np.float64)
+    f_sp = 200.0 / 3.0
+    mels = freq / f_sp
+    min_log_hz = 1000.0
+    min_log_mel = min_log_hz / f_sp
+    logstep = np.log(6.4) / 27.0
+    mask = freq >= min_log_hz
+    if freq.ndim:
+        mels[mask] = min_log_mel + np.log(freq[mask] / min_log_hz) / logstep
+    elif mask:
+        mels = min_log_mel + np.log(freq / min_log_hz) / logstep
+    return mels
+
+def _mel_to_hz(mels):
+    mels = np.asarray(mels, dtype=np.float64)
+    f_sp = 200.0 / 3.0
+    freqs = f_sp * mels
+    min_log_hz = 1000.0
+    min_log_mel = min_log_hz / f_sp
+    logstep = np.log(6.4) / 27.0
+    mask = mels >= min_log_mel
+    if mels.ndim:
+        freqs[mask] = min_log_hz * np.exp(logstep * (mels[mask] - min_log_mel))
+    elif mask:
+        freqs = min_log_hz * np.exp(logstep * (mels - min_log_mel))
+    return freqs
+
+def _mel_filterbank(sr, n_fft, n_mels, fmin, fmax):
+    if fmax is None:
+        fmax = float(sr) / 2.0
+    n_mels = int(n_mels)
+    weights = np.zeros((n_mels, 1 + n_fft // 2), dtype=np.float32)
+    fft_freqs = np.linspace(0, float(sr) / 2, 1 + n_fft // 2)
+    mel_min = _hz_to_mel(np.float64(fmin))
+    mel_max = _hz_to_mel(np.float64(fmax))
+    mel_points = np.linspace(mel_min, mel_max, n_mels + 2)
+    mel_f = _mel_to_hz(mel_points)
+    fdiff = np.diff(mel_f)
+    ramps = np.subtract.outer(mel_f, fft_freqs)
+    for i in range(n_mels):
+        lower = -ramps[i] / fdiff[i]
+        upper = ramps[i + 2] / fdiff[i + 1]
+        weights[i] = np.maximum(0, np.minimum(lower, upper))
+    enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
+    weights *= enorm[:, np.newaxis]
+    return weights
+
 def dynamic_range_compression_torch(x, C=1, clip_val=1e-5):
     return torch.log(torch.clamp(x, min=clip_val) * C)
 
@@ -432,7 +480,7 @@ def mel_spectrogram(
 
     device = y.device
 
-    mel = librosa_mel_fn(
+    mel = _mel_filterbank(
         sr=sampling_rate, n_fft=n_fft, n_mels=num_mels, fmin=fmin, fmax=fmax
     )
 

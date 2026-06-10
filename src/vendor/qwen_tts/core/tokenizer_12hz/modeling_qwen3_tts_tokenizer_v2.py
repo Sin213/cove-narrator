@@ -26,7 +26,6 @@ from torch.nn import functional as F
 from transformers import MimiConfig, MimiModel
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
-from transformers.integrations import use_kernel_forward_from_hub
 from transformers.masking_utils import (
     create_causal_mask,
     create_sliding_window_causal_mask,
@@ -369,7 +368,6 @@ class Qwen3TTSTokenizerV2DecoderMlp(nn.Module):
         return down_proj
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class Qwen3TTSTokenizerV2DecoderRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """

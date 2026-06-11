@@ -41,6 +41,22 @@ def _hd_deps_dir() -> Path | None:
     return None
 
 
+def _hd_log(msg: str):
+    """Append a diagnostic line to hd_install.log next to the exe (frozen) so
+    HD deps install/import failures are recoverable without a console."""
+    try:
+        if getattr(sys, 'frozen', False):
+            log_path = Path(sys.executable).parent / "hd_install.log"
+        else:
+            d = _hd_deps_dir()
+            log_path = (d.parent / "hd_install.log") if d else None
+        if log_path:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(msg.rstrip() + "\n")
+    except Exception:
+        pass
+
+
 def _ensure_hd_deps_on_path():
     import site
     deps_dir = _hd_deps_dir()
@@ -595,13 +611,13 @@ class CloneTab(QWidget):
             if _after_install:
                 for mod, err in import_errors.items():
                     print(f"[HD deps] {mod}: {err}", file=sys.stderr)
-                hint = (
-                    "Try installing Python 3.12 from python.org."
-                    if platform.system() == "Windows"
-                    else "Check the terminal for error details."
+                    _hd_log(f"import failed after install: {mod}: {err}")
+                detail = "; ".join(
+                    f"{m}: {e}" for m, e in import_errors.items()
                 )
                 self._hd_status.setText(
-                    f"Still missing after install: {', '.join(missing)}. {hint}"
+                    f"Still missing after install: {', '.join(missing)}.\n"
+                    f"{detail}\n(details in hd_install.log next to the app)"
                 )
                 return
             self._offer_hd_deps_install(missing)
@@ -900,6 +916,8 @@ class _HDDepsInstallWorker(QThread):
                 details = "\n".join(
                     f"  {m}: {e}" for m, e in failed.items()
                 )
+                for m, e in failed.items():
+                    _hd_log(f"worker verify import failed: {m}: {e}")
                 self.error.emit(
                     f"Packages installed but imports failed:\n{details}"
                 )
@@ -916,28 +934,40 @@ class _HDDepsInstallWorker(QThread):
             return [sys.executable, "-m", "pip"]
 
         app_ver = str(sys.version_info[:2])
-        for python in ("python", "python3"):
-            path = shutil.which(python)
-            if not path:
+        ver_str = f"{sys.version_info.major}.{sys.version_info.minor}"
+
+        # Candidate launchers, most specific first. The Windows `py -3.X`
+        # launcher finds a matching Python even when it is not the default on
+        # PATH (e.g. user has 3.13 default + 3.12 installed). Using a real
+        # interpreter is far more reliable than the embeddable fallback.
+        candidates = []
+        if platform.system() == "Windows":
+            candidates.append(["py", f"-{ver_str}"])
+        candidates += [[f"python{ver_str}"], ["python"], ["python3"]]
+
+        for cmd in candidates:
+            exe = shutil.which(cmd[0])
+            if not exe:
                 continue
+            args = [exe, *cmd[1:]]
             try:
                 r = subprocess.run(
-                    [path, "-c",
-                     "import sys; print(sys.version_info[:2])"],
+                    [*args, "-c", "import sys; print(sys.version_info[:2])"],
                     capture_output=True, text=True, timeout=10,
                     **self._popen_kwargs(),
                 )
                 if r.stdout.strip() == app_ver:
-                    return [path, "-m", "pip"]
+                    _hd_log(f"_find_pip: using {' '.join(args)} (matches {app_ver})")
+                    return [*args, "-m", "pip"]
             except Exception:
                 pass
 
         if platform.system() == "Windows":
-            ver_str = f"{sys.version_info.major}.{sys.version_info.minor}"
             self.progress.emit(
                 f"No compatible Python {ver_str} found on PATH. "
                 "Bootstrapping one…"
             )
+            _hd_log(f"_find_pip: no system Python {ver_str}; bootstrapping embeddable")
             return self._bootstrap_windows_pip()
         return None
 

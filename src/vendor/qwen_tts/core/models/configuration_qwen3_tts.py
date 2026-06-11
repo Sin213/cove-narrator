@@ -208,9 +208,11 @@ class Qwen3TTSTalkerCodePredictorConfig(PretrainedConfig):
         layer_types=None,
         attention_dropout=0,
         num_code_groups=32,
+        pad_token_id=None,
         **kwargs,
     ):
         super().__init__(
+            pad_token_id=pad_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
@@ -388,6 +390,7 @@ class Qwen3TTSTalkerConfig(PretrainedConfig):
         use_sliding_window=False,
         sliding_window=4096,
         attention_dropout=0,
+        pad_token_id=None,
         num_code_groups=32,
         text_hidden_size=2048,
         codec_eos_token_id=4198,
@@ -403,6 +406,7 @@ class Qwen3TTSTalkerConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(
+            pad_token_id=pad_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )

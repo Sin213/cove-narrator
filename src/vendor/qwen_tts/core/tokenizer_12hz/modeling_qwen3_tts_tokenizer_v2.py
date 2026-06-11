@@ -241,6 +241,23 @@ class Qwen3TTSTokenizerV2ConvNeXtBlock(nn.Module):
         return hidden_states
 
 
+def _compute_default_rope_inv_freq(config, device=None):
+    """Standard (non-scaled) RoPE inv_freq. transformers 5.x removed the
+    'default' entry from ROPE_INIT_FUNCTIONS and the
+    _compute_default_rope_parameters helper, so we compute the canonical RoPE
+    frequencies directly. Returns (inv_freq, attention_scaling)."""
+    base = config.rope_theta
+    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    head_dim = getattr(config, "head_dim", None)
+    if not head_dim:
+        head_dim = config.hidden_size // config.num_attention_heads
+    dim = int(head_dim * partial_rotary_factor)
+    inv_freq = 1.0 / (
+        base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+    )
+    return inv_freq, 1.0
+
+
 class Qwen3TTSTokenizerV2DecoderRotatoryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -255,10 +272,14 @@ class Qwen3TTSTokenizerV2DecoderRotatoryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS.get(
-            self.rope_type,
-            ROPE_INIT_FUNCTIONS.get("default", next(iter(ROPE_INIT_FUNCTIONS.values())))
-        )
+        if self.rope_type in ROPE_INIT_FUNCTIONS:
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        else:
+            # transformers 5.x dropped the "default" key from
+            # ROPE_INIT_FUNCTIONS; the old fallback to next(iter(...)) wrongly
+            # selected the linear fn (-> KeyError: 'factor'). Use the canonical
+            # default RoPE computation instead.
+            self.rope_init_fn = _compute_default_rope_inv_freq
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -535,9 +556,8 @@ class Qwen3TTSTokenizerV2DecoderTransformerModel(Qwen3TTSTokenizerV2DecoderPreTr
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }

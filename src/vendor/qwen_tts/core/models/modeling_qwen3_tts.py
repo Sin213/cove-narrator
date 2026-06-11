@@ -570,6 +570,23 @@ class Qwen3TTSTalkerTextPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+def _compute_default_rope_inv_freq(config, device=None):
+    """Standard (non-scaled) RoPE inv_freq. transformers 5.x removed the
+    'default' entry from ROPE_INIT_FUNCTIONS and the
+    _compute_default_rope_parameters helper, so we compute the canonical RoPE
+    frequencies directly. Returns (inv_freq, attention_scaling)."""
+    base = config.rope_theta
+    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    head_dim = getattr(config, "head_dim", None)
+    if not head_dim:
+        head_dim = config.hidden_size // config.num_attention_heads
+    dim = int(head_dim * partial_rotary_factor)
+    inv_freq = 1.0 / (
+        base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+    )
+    return inv_freq, 1.0
+
+
 class Qwen3TTSTalkerRotaryEmbedding(nn.Module):
     def __init__(self, config: Qwen3TTSTalkerConfig, device=None):
         super().__init__()
@@ -582,10 +599,14 @@ class Qwen3TTSTalkerRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS.get(
-            self.rope_type,
-            ROPE_INIT_FUNCTIONS.get("default", next(iter(ROPE_INIT_FUNCTIONS.values())))
-        )
+        if self.rope_type in ROPE_INIT_FUNCTIONS:
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        else:
+            # transformers 5.x dropped the "default" key from
+            # ROPE_INIT_FUNCTIONS; the old fallback to next(iter(...)) wrongly
+            # selected the linear fn (-> KeyError: 'factor'). Use the canonical
+            # default RoPE computation instead.
+            self.rope_init_fn = _compute_default_rope_inv_freq
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -620,10 +641,14 @@ class Qwen3TTSRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS.get(
-            self.rope_type,
-            ROPE_INIT_FUNCTIONS.get("default", next(iter(ROPE_INIT_FUNCTIONS.values())))
-        )
+        if self.rope_type in ROPE_INIT_FUNCTIONS:
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        else:
+            # transformers 5.x dropped the "default" key from
+            # ROPE_INIT_FUNCTIONS; the old fallback to next(iter(...)) wrongly
+            # selected the linear fn (-> KeyError: 'factor'). Use the canonical
+            # default RoPE computation instead.
+            self.rope_init_fn = _compute_default_rope_inv_freq
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -1148,10 +1173,10 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3TTSPreTrainedModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
+                "position_ids": position_ids,
             }
             # Create the masks
             causal_mask_mapping = {
@@ -1562,9 +1587,8 @@ class Qwen3TTSTalkerModel(Qwen3TTSTalkerTextPreTrainedModel):
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=text_position_ids,
         )
@@ -1742,6 +1766,16 @@ class Qwen3TTSTalkerForConditionalGeneration(Qwen3TTSTalkerTextPreTrainedModel, 
                 inputs_embeds = inputs_embeds + trailing_text_hidden[:, generation_step].unsqueeze(1)
             else:
                 inputs_embeds = inputs_embeds + tts_pad_embed
+        # transformers 5.x does not always pass `cache_position` into this custom
+        # forward. Derive it from the cache so the prefill/decode branch below is
+        # selected correctly — otherwise every decode step re-runs the prefill
+        # rope path (get_rope_index) and broadcasts RoPE to the full prompt
+        # length, corrupting the attention (KeyError/shape-mismatch downstream).
+        if cache_position is None and past_key_values is not None:
+            past_seen = past_key_values.get_seq_length()
+            _seq_len = inputs_embeds.shape[1] if inputs_embeds is not None else input_ids.shape[1]
+            _dev = inputs_embeds.device if inputs_embeds is not None else input_ids.device
+            cache_position = torch.arange(past_seen, past_seen + _seq_len, device=_dev)
         if attention_mask is not None:
             if (
                 cache_position is None

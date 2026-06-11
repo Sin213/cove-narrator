@@ -15,3 +15,6 @@ handoff.md
 .hdtest/
 
 .hdtest_*
+release/
+build/cove-narrator/
+build/cove-narrator-portable/

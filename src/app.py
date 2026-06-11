@@ -334,8 +334,25 @@ class MainWindow(QMainWindow):
         ml.addWidget(self._stack, 1)
         root.addWidget(main, 1)
 
-        self.resize(self._config.get("window_width", 1050),
-                    self._config.get("window_height", 600))
+        from PySide6.QtGui import QGuiApplication
+        default_w, default_h = 1050, 680
+        w = self._config.get("window_width", default_w)
+        h = self._config.get("window_height", default_h)
+        screen = QGuiApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            # A previously maximized session can save full-screen dimensions;
+            # fall back to a normal default so the app never starts filling
+            # the screen, then clamp to fit and center.
+            if w >= avail.width() * 0.95 or h >= avail.height() * 0.95:
+                w, h = default_w, default_h
+            w = min(w, avail.width() - 80)
+            h = min(h, avail.height() - 80)
+            self.resize(w, h)
+            self.move(avail.x() + (avail.width() - w) // 2,
+                      avail.y() + (avail.height() - h) // 2)
+        else:
+            self.resize(w, h)
         self._apply_config()
         self._setup_shortcuts()
         self._set_mode(0)
@@ -485,17 +502,15 @@ class MainWindow(QMainWindow):
 
     def _measure_voice_f0s(self) -> dict[str, float]:
         """Synthesize a short phrase with each voice and measure median F0."""
-        import librosa
-        import numpy as np
+        from src.engine import audio_features as af
         phrase = "Hello, this is a test."
         cache = {}
         for p in self._presets.get_builtin_presets():
             try:
                 samples, sr = self._engine.synthesize_raw(phrase, voice=p.voice_id, speed=1.0)
-                f0, voiced, _ = librosa.pyin(samples, fmin=50, fmax=600, sr=sr)
-                vf = f0[voiced & ~np.isnan(f0)]
-                if len(vf) > 0:
-                    cache[p.voice_id] = float(np.median(vf))
+                med = af.median_f0(samples, sr, fmin=50, fmax=600)
+                if med is not None:
+                    cache[p.voice_id] = med
             except Exception:
                 continue
         return cache
@@ -629,8 +644,15 @@ class MainWindow(QMainWindow):
         super().leaveEvent(event)
 
     def closeEvent(self, event):
-        self._config["window_width"] = self.width()
-        self._config["window_height"] = self.height()
+        # Save the restored (non-maximized) size so the next launch doesn't
+        # start full-screen.
+        if self.isMaximized() or self.isFullScreen():
+            geo = self.normalGeometry()
+            self._config["window_width"] = geo.width()
+            self._config["window_height"] = geo.height()
+        else:
+            self._config["window_width"] = self.width()
+            self._config["window_height"] = self.height()
         if self._current_voice_preset:
             self._config["last_voice"] = self._current_voice_preset.voice_id
             if self._current_voice_preset.blend_key:

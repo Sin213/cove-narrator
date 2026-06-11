@@ -7,16 +7,15 @@ from pathlib import Path
 import numpy as np
 from kokoro_onnx import Kokoro
 
+from src.engine import audio_features as af
+
 
 _BLEND_PHRASE = "I have an important message for you today."
 
 
 def _measure_f0(audio: np.ndarray, sr: int) -> float:
-    import librosa  # lazy: optional runtime dep, not bundled in frozen build
-
-    f0, voiced, _ = librosa.pyin(audio, fmin=50, fmax=600, sr=sr)
-    vf = f0[voiced & ~np.isnan(f0)]
-    return float(np.median(vf)) if len(vf) > 0 else 150.0
+    med = af.median_f0(audio, sr, fmin=50, fmax=600)
+    return med if med is not None else 150.0
 
 
 def _f0_score(gen_f0: float, ref_f0: float) -> float:
@@ -39,10 +38,8 @@ def find_best_blend(
         if progress_cb:
             progress_cb(stage, detail)
 
-    import librosa  # lazy: optional runtime dep, not bundled in frozen build
-
     _progress("loading", "Analyzing reference audio…")
-    y_ref, sr_ref = librosa.load(ref_path, sr=24000, mono=True)
+    y_ref, sr_ref = af.load_audio(ref_path, sr=24000)
     # Use up to 15s for stable F0 estimate
     clip_len = min(len(y_ref), sr_ref * 15)
     ref_f0 = _measure_f0(y_ref[:clip_len], sr_ref)

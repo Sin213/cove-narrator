@@ -398,8 +398,8 @@ class CloneTab(QWidget):
         if not self._ref_audio_path:
             return
         try:
-            import librosa
-            y, sr = librosa.load(self._ref_audio_path, sr=24000, mono=True)
+            from src.engine import audio_features as af
+            y, sr = af.load_audio(self._ref_audio_path, sr=24000)
             self._player.load(y, sr)
             self._player.play()
         except Exception as e:

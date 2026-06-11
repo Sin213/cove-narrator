@@ -57,6 +57,30 @@ def _hd_log(msg: str):
         pass
 
 
+# major.minor of transformers the vendored Qwen3-TTS model requires. The model
+# was written for 4.x; the 5.x port produced degenerate (non-stop) generation.
+_REQUIRED_TRANSFORMERS = (4, 57)
+
+
+def _purge_stale_hd_deps():
+    """If the HD deps dir holds a transformers of the wrong major.minor (e.g. a
+    previous build's 5.x), delete the deps dir so a clean, correct stack
+    installs. Reads the dist-info on disk — never imports the stale version —
+    so the running process is not poisoned with the wrong transformers."""
+    import re
+    import shutil
+    deps = _hd_deps_dir()
+    if not deps or not deps.is_dir():
+        return
+    for p in deps.glob("transformers-*.dist-info"):
+        m = re.match(r"transformers-(\d+)\.(\d+)", p.name)
+        if m and (int(m.group(1)), int(m.group(2))) != _REQUIRED_TRANSFORMERS:
+            _hd_log(f"purging stale HD deps (found {p.name}, "
+                    f"need transformers {_REQUIRED_TRANSFORMERS[0]}.{_REQUIRED_TRANSFORMERS[1]}.x)")
+            shutil.rmtree(deps, ignore_errors=True)
+            return
+
+
 def _ensure_hd_deps_on_path():
     import site
     deps_dir = _hd_deps_dir()
@@ -598,6 +622,8 @@ class CloneTab(QWidget):
     # -- HD Neural Clone (optional download) --
 
     def _on_hd_action(self, _after_install=False):
+        if not _after_install:
+            _purge_stale_hd_deps()
         _ensure_hd_deps_on_path()
         missing = []
         import_errors = {}
@@ -791,18 +817,21 @@ class _HDDepsInstallWorker(QThread):
     progress = Signal(str)
     error = Signal(str)
 
+    # transformers 4.x — the version Qwen3-TTS was written for. The 5.x port
+    # produced degenerate generation (non-stop buzzing); 4.57.3 generates
+    # correct, properly-terminated speech. hf-hub must stay <1.0 (4.57.3
+    # requires it), which pulls requests/urllib3 instead of the httpx stack.
     HD_PACKAGES = [
         "torch==2.12.0",
-        "transformers==5.10.2",
-        "huggingface-hub==1.18.0",
-        "numpy", "pyyaml", "regex", "safetensors", "tokenizers==0.22.2",
-        "tqdm", "packaging", "hf-xet", "httpx", "httpcore", "anyio",
-        "certifi", "h11", "idna", "typer", "click", "rich", "pygments",
-        "annotated-doc", "shellingham", "markdown-it-py", "mdurl",
-        "colorama", "filelock", "fsspec", "jinja2", "markupsafe",
-        "mpmath", "networkx", "setuptools", "sympy", "typing-extensions",
+        "transformers==4.57.3",
+        "huggingface-hub==0.36.2",
+        "tokenizers==0.22.2",
+        "numpy", "pyyaml", "regex", "safetensors", "accelerate", "psutil",
+        "tqdm", "packaging", "filelock", "fsspec", "typing-extensions",
+        "setuptools", "requests", "urllib3", "charset-normalizer",
+        "certifi", "idna", "colorama",
+        "jinja2", "markupsafe", "mpmath", "networkx", "sympy",
         "soundfile", "cffi", "pycparser",
-        "accelerate", "psutil",
     ]
     ESTIMATED_TOTAL_MB = 800
 

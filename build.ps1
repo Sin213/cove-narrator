@@ -35,6 +35,25 @@ python -m venv .buildenv
 & .\.buildenv\Scripts\python.exe -m pip install --quiet `
     -r requirements.txt pyinstaller Pillow
 
+# --- 1b. Bundle the full standard library as hidden imports ---
+# torch/transformers/huggingface_hub are installed at RUNTIME, so PyInstaller
+# cannot see which stdlib modules they import lazily (e.g. pickletools). Add
+# every stdlib module as a hidden import so those runtime deps resolve in the
+# frozen app. Skip the tkinter family (also excluded below) and dev/test modules.
+Step "Collecting stdlib modules for hidden imports"
+$stdlibDeny = @('tkinter','turtle','turtledemo','idlelib','test','lib2to3',
+                'antigravity','this','_tkinter','pydoc_data','__hello__','__phello__')
+$stdlibList = & .\.buildenv\Scripts\python.exe -c "import sys; print('\n'.join(sorted(sys.stdlib_module_names)))"
+$stdlibHidden = @()
+foreach ($m in ($stdlibList -split "`r?`n")) {
+    $m = $m.Trim()
+    if ($m -and ($stdlibDeny -notcontains $m)) {
+        $stdlibHidden += '--hidden-import'
+        $stdlibHidden += $m
+    }
+}
+Write-Host ("  -> {0} stdlib modules" -f ($stdlibHidden.Count / 2))
+
 # --- 2. Download model files if missing ---
 Step "[2/8] Downloading model files"
 $modelsDir = "data\models"
@@ -96,7 +115,7 @@ $commonArgs = @(
     'src\main.py'
 )
 
-& .\.buildenv\Scripts\pyinstaller.exe @commonArgs
+& .\.buildenv\Scripts\pyinstaller.exe @stdlibHidden @commonArgs
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller (onedir) failed" }
 
 $dirAppDir = Join-Path 'dist' $App
@@ -107,7 +126,7 @@ if (Test-Path LICENSE)   { Copy-Item LICENSE   $dirAppDir -Force }
 # --- 4. PyInstaller one-file (portable) ---
 Step "[5/8] PyInstaller (one-file portable)"
 $portableName = "$App-portable"
-& .\.buildenv\Scripts\pyinstaller.exe `
+& .\.buildenv\Scripts\pyinstaller.exe @stdlibHidden `
     --noconfirm --clean --log-level WARN `
     --onefile --windowed `
     --name $portableName `

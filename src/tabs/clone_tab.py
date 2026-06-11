@@ -933,35 +933,16 @@ class _HDDepsInstallWorker(QThread):
         if not getattr(sys, 'frozen', False):
             return [sys.executable, "-m", "pip"]
 
-        app_ver = str(sys.version_info[:2])
+        # Use the same interpreter resolver as the model download, so deps are
+        # installed with — and the model is later downloaded by — the same real
+        # Python (e.g. `py -3.12`) instead of a fragile embeddable.
+        from src.engine.clone_tts import find_matching_python
+        py = find_matching_python()
+        if py:
+            _hd_log(f"_find_pip: using {' '.join(py)} -m pip")
+            return [*py, "-m", "pip"]
+
         ver_str = f"{sys.version_info.major}.{sys.version_info.minor}"
-
-        # Candidate launchers, most specific first. The Windows `py -3.X`
-        # launcher finds a matching Python even when it is not the default on
-        # PATH (e.g. user has 3.13 default + 3.12 installed). Using a real
-        # interpreter is far more reliable than the embeddable fallback.
-        candidates = []
-        if platform.system() == "Windows":
-            candidates.append(["py", f"-{ver_str}"])
-        candidates += [[f"python{ver_str}"], ["python"], ["python3"]]
-
-        for cmd in candidates:
-            exe = shutil.which(cmd[0])
-            if not exe:
-                continue
-            args = [exe, *cmd[1:]]
-            try:
-                r = subprocess.run(
-                    [*args, "-c", "import sys; print(sys.version_info[:2])"],
-                    capture_output=True, text=True, timeout=10,
-                    **self._popen_kwargs(),
-                )
-                if r.stdout.strip() == app_ver:
-                    _hd_log(f"_find_pip: using {' '.join(args)} (matches {app_ver})")
-                    return [*args, "-m", "pip"]
-            except Exception:
-                pass
-
         if platform.system() == "Windows":
             self.progress.emit(
                 f"No compatible Python {ver_str} found on PATH. "

@@ -8,6 +8,54 @@ from src.engine.tts import TTSEngine
 from src.engine.audio_dsp import apply_all
 
 
+def find_matching_python(timeout: int = 10):
+    """Return an argv prefix for a Python interpreter whose version matches the
+    frozen app's (e.g. ['C:/Windows/py.exe', '-3.12'] or ['python']), or None.
+
+    Used both to pip-install the HD deps and to run the model-download
+    subprocess, so they share one reliable interpreter instead of a hardcoded
+    embeddable that the installer no longer bootstraps. Falls back to that
+    embeddable if it happens to exist."""
+    import sys
+    import shutil
+    import subprocess
+    import platform
+
+    if not getattr(sys, "frozen", False):
+        return [sys.executable]
+
+    app_ver = str(sys.version_info[:2])
+    ver_str = f"{sys.version_info.major}.{sys.version_info.minor}"
+    kw = {}
+    if platform.system() == "Windows":
+        kw["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+
+    candidates = []
+    if platform.system() == "Windows":
+        candidates.append(["py", f"-{ver_str}"])
+    candidates += [[f"python{ver_str}"], ["python"], ["python3"]]
+
+    for cmd in candidates:
+        exe = shutil.which(cmd[0])
+        if not exe:
+            continue
+        args = [exe, *cmd[1:]]
+        try:
+            r = subprocess.run(
+                [*args, "-c", "import sys; print(sys.version_info[:2])"],
+                capture_output=True, text=True, timeout=timeout, **kw,
+            )
+            if r.stdout.strip() == app_ver:
+                return args
+        except Exception:
+            pass
+
+    emb = Path(sys.executable).parent / "dependencies" / "_python" / "python.exe"
+    if emb.exists():
+        return [str(emb)]
+    return None
+
+
 class VoiceMatchResult:
     def __init__(self, weights: dict, tensor: np.ndarray,
                  pitch: int, speed: int, depth: int, gender: str, median_f0: float):
@@ -143,11 +191,12 @@ class QwenCloneEngine:
         import platform
         import time as _time
 
-        py_exe = Path(sys.executable).parent / "dependencies" / "_python" / "python.exe"
-        if not py_exe.exists():
+        py_args = find_matching_python()
+        if not py_args:
+            ver = f"{sys.version_info.major}.{sys.version_info.minor}"
             raise RuntimeError(
-                f"Portable Python not found at {py_exe}. "
-                "Cannot download model in frozen environment."
+                f"No compatible Python {ver} found to download the model. "
+                f"Install Python {ver} from python.org and restart the app."
             )
 
         model_dir = self.model_dir()
@@ -158,17 +207,21 @@ class QwenCloneEngine:
             "os.environ['HF_HUB_ENABLE_HF_TRANSFER']='0';"
             "os.environ['HF_HUB_DISABLE_XET']='1';"
             "from huggingface_hub import snapshot_download;"
-            f"snapshot_download({self._MODEL_REPO!r}, local_dir={str(model_dir)!r},"
-            " local_dir_use_symlinks=False)"
+            f"snapshot_download({self._MODEL_REPO!r}, local_dir={str(model_dir)!r})"
         )
 
         kw = {}
         if platform.system() == "Windows":
             kw["creationflags"] = subprocess.CREATE_NO_WINDOW
 
+        # Drain output to a log file rather than PIPE — the progress loop below
+        # never reads the pipes, so a chatty download could fill the OS buffer
+        # and deadlock the subprocess.
+        log_path = model_dir.parent / "model_download.log"
+        log_f = open(log_path, "w", encoding="utf-8", errors="replace")
         proc = subprocess.Popen(
-            [str(py_exe), "-c", script],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kw,
+            [*py_args, "-c", script],
+            stdout=log_f, stderr=subprocess.STDOUT, **kw,
         )
 
         ESTIMATED_BYTES = 4_300_000_000
@@ -198,11 +251,24 @@ class QwenCloneEngine:
             else:
                 progress_cb(f"Downloading… ({mb:.0f} MB)")
 
+        log_f.close()
+        try:
+            tail = log_path.read_text(encoding="utf-8", errors="replace")[-800:]
+        except OSError:
+            tail = ""
+
         if proc.returncode != 0:
-            stderr = proc.stderr.read().decode(errors="replace")
             raise RuntimeError(
-                f"Model download failed (exit {proc.returncode}):\n"
-                f"{stderr[-500:]}"
+                f"Model download failed (exit {proc.returncode}):\n{tail}"
+            )
+
+        # Verify the model actually landed — otherwise the UI would report
+        # "Download complete" while is_downloaded() stays False, re-looping the
+        # user back to the download prompt.
+        if not self.is_downloaded():
+            raise RuntimeError(
+                "Download finished but model.safetensors is missing from\n"
+                f"{model_dir}\n\n{tail}"
             )
 
     def load(self, progress_cb=None):

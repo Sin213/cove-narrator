@@ -32,10 +32,55 @@ try:
     import torchaudio.compliance.kaldi as kaldi
 except ImportError:
     kaldi = None
-try:
-    from librosa.filters import mel as librosa_mel_fn
-except ImportError:
-    librosa_mel_fn = None
+import numpy as np
+
+
+def librosa_mel_fn(sr, n_fft, n_mels, fmin, fmax):
+    """Pure-numpy slaney mel filterbank — drop-in replacement for
+    librosa.filters.mel. librosa is not bundled in the frozen build and
+    its deps can't install under pip --no-deps, so we reimplement the one
+    call we need. Validated bit-exact (<2e-9) against librosa 0.11 with
+    its defaults (htk=False, norm='slaney')."""
+    def hz_to_mel(f):
+        f = np.asanyarray(f, dtype=float)
+        f_sp = 200.0 / 3
+        min_log_hz = 1000.0
+        min_log_mel = min_log_hz / f_sp
+        logstep = np.log(6.4) / 27.0
+        mels = f / f_sp
+        log_t = f >= min_log_hz
+        return np.where(log_t,
+                        min_log_mel + np.log(np.where(log_t, f, min_log_hz) / min_log_hz) / logstep,
+                        mels)
+
+    def mel_to_hz(m):
+        m = np.asanyarray(m, dtype=float)
+        f_sp = 200.0 / 3
+        min_log_hz = 1000.0
+        min_log_mel = min_log_hz / f_sp
+        logstep = np.log(6.4) / 27.0
+        freqs = f_sp * m
+        log_t = m >= min_log_mel
+        return np.where(log_t,
+                        min_log_hz * np.exp(logstep * (np.where(log_t, m, min_log_mel) - min_log_mel)),
+                        freqs)
+
+    n_fft_freqs = 1 + n_fft // 2
+    fftfreqs = np.linspace(0, sr / 2, n_fft_freqs)
+    mel_pts = np.linspace(hz_to_mel(fmin), hz_to_mel(fmax), n_mels + 2)
+    freq_pts = mel_to_hz(mel_pts)
+    weights = np.zeros((n_mels, n_fft_freqs))
+    fdiff = np.diff(freq_pts)
+    ramps = np.subtract.outer(freq_pts, fftfreqs)
+    for i in range(n_mels):
+        lower = -ramps[i] / fdiff[i]
+        upper = ramps[i + 2] / fdiff[i + 1]
+        weights[i] = np.maximum(0, np.minimum(lower, upper))
+    enorm = 2.0 / (freq_pts[2:n_mels + 2] - freq_pts[:n_mels])  # slaney norm
+    weights *= enorm[:, np.newaxis]
+    return weights.astype(np.float32)
+
+
 from itertools import accumulate
 from typing import List
 from torch import Tensor

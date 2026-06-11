@@ -69,6 +69,7 @@ $commonArgs = @(
     '--paths', '.',
     '--collect-submodules', 'src',
     '--add-data', ("src\vendor\qwen_tts\core\tokenizer_25hz\vq\assets" + [IO.Path]::PathSeparator + "src\vendor\qwen_tts\core\tokenizer_25hz\vq\assets"),
+    '--add-data', ("src\vendor\qwen_tts" + [IO.Path]::PathSeparator + "src\vendor\qwen_tts"),
     '--collect-data', 'kokoro_onnx',
     '--collect-data', 'phonemizer',
     '--collect-data', 'language_tags',
@@ -114,6 +115,7 @@ $portableName = "$App-portable"
     --paths . `
     --collect-submodules src `
     --add-data ("src\vendor\qwen_tts\core\tokenizer_25hz\vq\assets" + [IO.Path]::PathSeparator + "src\vendor\qwen_tts\core\tokenizer_25hz\vq\assets") `
+    --add-data ("src\vendor\qwen_tts" + [IO.Path]::PathSeparator + "src\vendor\qwen_tts") `
     --collect-data kokoro_onnx `
     --collect-data phonemizer `
     --collect-data language_tags `

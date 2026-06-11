@@ -766,7 +766,8 @@ class _HDSynthWorker(QThread):
             audio, sr = self._engine.synthesize(self._text, self._ref_audio_path)
             self.finished.emit(audio, sr)
         except Exception as e:
-            self.error.emit(str(e))
+            import traceback
+            self.error.emit(f"{e}\n{traceback.format_exc()}")
 
 
 class _HDDepsInstallWorker(QThread):

@@ -26,12 +26,27 @@ elif sys.platform.startswith('linux'):
         sys.path.insert(0, _deps_str)
         site.addsitedir(_deps_str)
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 from src.app import MainWindow
+
+
+def _global_exception_handler(exc_type, exc_value, exc_tb):
+    import traceback
+    msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+    try:
+        box = QMessageBox()
+        box.setIcon(QMessageBox.Critical)
+        box.setWindowTitle("Cove Narrator — Unexpected Error")
+        box.setText(str(exc_value))
+        box.setDetailedText(msg)
+        box.exec()
+    except Exception:
+        pass
 
 
 def main():
     app = QApplication(sys.argv)
+    sys.excepthook = _global_exception_handler
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

@@ -11,3 +11,7 @@ data/models/*.onnx
 data/models/*.bin
 .superpowers/
 handoff.md
+
+.hdtest/
+
+.hdtest_*

@@ -33,6 +33,19 @@ python3 -m venv "$BUILD_ENV"
 "$BUILD_ENV/bin/pip" install --quiet --upgrade pip
 "$BUILD_ENV/bin/pip" install --quiet -r requirements.txt pyinstaller
 
+# Bundle the full standard library as hidden imports — torch/transformers are
+# installed at runtime, so PyInstaller can't see their lazy stdlib imports
+# (e.g. pickletools), and the frozen app would fail with
+# ModuleNotFoundError: No module named 'pickletools'. Mirrors build.ps1.
+STDLIB_HIDDEN=$("$BUILD_ENV/bin/python" - <<'PYEOF'
+import sys
+deny = {'tkinter','turtle','turtledemo','idlelib','test','lib2to3',
+        'antigravity','this','_tkinter','pydoc_data','__hello__','__phello__'}
+print(' '.join('--hidden-import ' + m
+               for m in sorted(sys.stdlib_module_names) if m not in deny))
+PYEOF
+)
+
 # ----------------------------------------------------------------------
 # 1. Download model files if missing
 # ----------------------------------------------------------------------
@@ -75,8 +88,8 @@ echo "==> Running PyInstaller"
     --hidden-import onnxruntime \
     --hidden-import sounddevice \
     --hidden-import soundfile \
-    --hidden-import librosa \
     --hidden-import numpy \
+    $STDLIB_HIDDEN \
     --hidden-import PySide6 \
     --hidden-import pymupdf \
     --exclude-module PySide6.QtWebEngineCore \

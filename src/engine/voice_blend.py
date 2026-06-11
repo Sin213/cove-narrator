@@ -4,7 +4,6 @@ approximate a reference audio clip's pitch."""
 import json
 from pathlib import Path
 
-import librosa
 import numpy as np
 from kokoro_onnx import Kokoro
 
@@ -13,6 +12,8 @@ _BLEND_PHRASE = "I have an important message for you today."
 
 
 def _measure_f0(audio: np.ndarray, sr: int) -> float:
+    import librosa  # lazy: optional runtime dep, not bundled in frozen build
+
     f0, voiced, _ = librosa.pyin(audio, fmin=50, fmax=600, sr=sr)
     vf = f0[voiced & ~np.isnan(f0)]
     return float(np.median(vf)) if len(vf) > 0 else 150.0
@@ -37,6 +38,8 @@ def find_best_blend(
     def _progress(stage, detail=""):
         if progress_cb:
             progress_cb(stage, detail)
+
+    import librosa  # lazy: optional runtime dep, not bundled in frozen build
 
     _progress("loading", "Analyzing reference audio…")
     y_ref, sr_ref = librosa.load(ref_path, sr=24000, mono=True)

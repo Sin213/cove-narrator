@@ -1,5 +1,4 @@
 import numpy as np
-import librosa
 
 _F0_FEMALE = 200.0
 _F0_MALE = 120.0
@@ -17,6 +16,8 @@ def analyze_reference(file_path: str) -> tuple[int, int, int, str, float]:
     Pitch slider is relative to the detected gender's baseline.
     median_f0 is returned so the caller can pick the closest voice.
     """
+    import librosa  # lazy: optional runtime dep, not bundled in frozen build
+
     y, sr = librosa.load(file_path, sr=24000, mono=True)
 
     f0, voiced, _ = librosa.pyin(y, fmin=50, fmax=600, sr=sr)

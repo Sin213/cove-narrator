@@ -859,8 +859,20 @@ class _HDDepsInstallWorker(QThread):
             cmd += list(self.HD_PACKAGES)
 
             self.progress.emit("Installing HD dependencies…")
+            # Drain pip's output to a log file, NOT a PIPE. The progress loop
+            # below polls proc.poll() without ever reading stdout, so a PIPE
+            # fills the ~64 KB OS buffer and deadlocks pip mid-install — the UI
+            # hangs on "Resolving dependencies…" forever. Mirrors the
+            # model-download fix in clone_tts._download_subprocess.
+            pip_log_path = (
+                (self._deps_dir.parent if self._deps_dir else Path.cwd())
+                / "hd_pip_install.log"
+            )
+            pip_log = open(
+                pip_log_path, "w", encoding="utf-8", errors="replace"
+            )
             proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                cmd, stdout=pip_log, stderr=subprocess.STDOUT,
                 **self._popen_kwargs(),
             )
 
@@ -903,10 +915,18 @@ class _HDDepsInstallWorker(QThread):
                         f"Resolving dependencies… [{ts}]")
 
             proc.wait(timeout=3600)
+            pip_log.close()
 
             if proc.returncode != 0:
+                try:
+                    tail = pip_log_path.read_text(
+                        encoding="utf-8", errors="replace")[-800:]
+                except OSError:
+                    tail = ""
+                _hd_log(f"pip install failed (exit {proc.returncode}):\n{tail}")
                 self.error.emit(
-                    "Installation failed. Check your internet connection."
+                    "Installation failed. Check your internet connection.\n"
+                    "(details in hd_install.log next to the app)"
                 )
                 return
 

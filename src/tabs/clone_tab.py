@@ -33,16 +33,10 @@ SUPPORTED_FORMATS = (".mp3", ".wav", ".flac", ".ogg", ".m4a", ".opus", ".wma")
 def _hd_deps_dir() -> Path | None:
     if getattr(sys, 'frozen', False):
         if platform.system() == "Linux":
-            xdg = os.environ.get(
-                "XDG_DATA_HOME", str(Path.home() / ".local" / "share")
-            )
-            return Path(xdg) / "cove-narrator" / "hd-deps"
+            return Path.home() / ".local" / "share" / "cove-narrator" / "hd-deps"
         return Path(sys.executable).parent / "dependencies" / "cove-narrator"
     if platform.system() == "Linux":
-        xdg = os.environ.get(
-            "XDG_DATA_HOME", str(Path.home() / ".local" / "share")
-        )
-        return Path(xdg) / "cove-narrator" / "hd-deps"
+        return Path.home() / ".local" / "share" / "cove-narrator" / "hd-deps"
     return None
 
 

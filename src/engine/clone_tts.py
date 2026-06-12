@@ -299,7 +299,7 @@ class QwenCloneEngine:
             ref_audio=ref_audio_path, ref_text="unused",
             x_vector_only_mode=True,
             non_streaming_mode=True,
-            repetition_penalty=1.0,
+            do_sample=False,
         )
         audio = wavs[0]
         if not isinstance(audio, np.ndarray):

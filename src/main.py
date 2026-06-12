@@ -17,8 +17,7 @@ if getattr(sys, 'frozen', False) and not sys.platform.startswith('linux'):
             if str(_zf) not in sys.path:
                 sys.path.append(str(_zf))
 elif sys.platform.startswith('linux'):
-    _xdg = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
-    _deps = Path(_xdg) / "cove-narrator" / "hd-deps"
+    _deps = Path.home() / ".local" / "share" / "cove-narrator" / "hd-deps"
     if _deps.is_dir():
         _deps_str = str(_deps)
         if _deps_str not in sys.path:

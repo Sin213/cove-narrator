@@ -37,10 +37,10 @@ All releases include `checksums-sha256.txt` for verification.
 
 **HD Voice Clone (optional):**
 
-- One-click install of HD dependencies (~5 GB) and Qwen3-TTS model (4.3 GB)
+- One-click install of HD dependencies (~800 MB) and Qwen3-TTS model (4.3 GB)
 - Real-time download progress with percentage, ETA, and size counters
-- Requires NVIDIA GPU with 4+ GB VRAM
-- Works on both Linux and Windows, including portable/frozen builds
+- Runs on CPU or NVIDIA GPU — a 4+ GB VRAM GPU is recommended for faster generation
+- Works on both Linux and Windows, including portable/frozen builds (verified by per-platform CI smoke tests)
 
 **Audio:**
 

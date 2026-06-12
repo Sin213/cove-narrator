@@ -221,7 +221,9 @@ jobs:
       - name: Collect release assets and generate checksum bundle
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*-Setup.exe' -o -name '*-Portable.exe' \) -exec cp {} release/ \;
+          # AppImage is intentionally excluded — it is built and uploaded
+          # separately from a local Linux build, then added to the draft release.
+          find artifacts -type f \( -name '*.deb' -o -name '*-Setup.exe' -o -name '*-Portable.exe' \) -exec cp {} release/ \;
           cd release
           sha256sum * > checksums-sha256.txt
           cat checksums-sha256.txt
@@ -231,21 +233,30 @@ jobs:
         with:
           files: release/*
           fail_on_unmatched_files: true
+          draft: true
           body: |
-            ## What's New in v2.2.0
+            ## Cove Narrator v2.2.0
 
-            HD Voice Clone (Qwen3-TTS) now works reliably on both Windows portable
-            builds and Linux AppImage, with the dependency and model stack fully
-            sorted out — plus a release-gated smoke test so it stays that way.
+            HD Voice Clone (Qwen3-TTS) is now fully working on **Windows**
+            (installer + portable) and **Linux** (AppImage + .deb). This release
+            fixes the dependency install, model download, and audio quality
+            end-to-end, and adds automated smoke tests so HD clone can't silently
+            regress again.
 
-            ### HD Voice Clone
-            - **Generates real speech** — ships transformers 4.57.3 (the 5.x port produced degenerate, non-stop buzzing); a guard now purges a stale wrong-version deps dir so a clean, correct stack reinstalls.
-            - **Works on Linux AppImage** — frozen Linux uses XDG paths and a system `python3` for multiprocessing; HD deps install in a single dependency-resolving pip call for stability.
-            - **Reliable model download** — the portable exe shells out to a real Python for `snapshot_download`, fixing the hang and post-download crash on Windows; downloads to `dependencies/models/` next to the exe (fully USB-portable).
-            - **Slimmer, self-contained** — `qwen-tts` is vendored directly (no pip install dragging in gradio/sox/torchaudio); librosa replaced with numpy/scipy to fix startup crashes.
+            ### 🎙️ HD Voice Clone — now reliable
+            - **Install no longer hangs.** The HD-dependency installer fed its pip subprocess through an unread pipe, which filled the Windows pipe buffer, deadlocked pip, and froze the UI on "Resolving dependencies…" forever. pip output now streams to a log file, so the install completes normally (~800 MB, ~1–2 min).
+            - **Generates real speech.** Ships transformers 4.57.3 — the 5.x port produced degenerate, non-terminating buzzing. A guard purges a stale wrong-version deps dir so a clean, correct stack always reinstalls.
+            - **Cleaner audio.** Greedy decoding (`do_sample=False`) for stable, properly-terminated output.
+            - **Reliable model download.** The portable exe shells out to a real Python for `snapshot_download`, fixing the earlier hang and post-download crash; the 4.3 GB model lands in `dependencies/models/` next to the exe (fully USB-portable).
+            - **Works on Linux AppImage.** Frozen Linux uses the correct XDG deps path and a system `python3` for multiprocessing; HD deps install in a single dependency-resolving pip call.
 
-            ### Quality
-            - **CI smoke test** — every tagged release now installs the pinned HD deps, downloads the model, generates a clip, and asserts non-degenerate output, blocking the release if HD clone regresses.
+            ### 📦 Slimmer & more robust
+            - `qwen-tts` is vendored directly — no pip install dragging in gradio/sox/torchaudio.
+            - librosa replaced with numpy/scipy, fixing startup crashes.
+            - Full standard library bundled as hidden imports so the runtime-installed torch/transformers resolve inside the frozen app.
+
+            ### ✅ Quality gates
+            - **CI smoke tests on Windows *and* Linux** — every tagged release installs the pinned HD deps, downloads the model, generates a clip, and asserts non-degenerate speech, blocking the release if HD clone regresses on either platform.
             - Wider window resize grip for easier edge grabbing.
 
             ### Downloads
@@ -254,11 +265,9 @@ jobs:
             |------|----------|------|
             | `Cove-Narrator-${{ env.VERSION }}-Setup.exe` | Windows | Installer |
             | `Cove-Narrator-${{ env.VERSION }}-Portable.exe` | Windows | Single-file portable |
-            | `cove-narrator-${{ env.VERSION }}.AppImage` | Linux | Portable (any distro) |
+            | `Cove-Narrator-${{ env.VERSION }}-x86_64.AppImage` | Linux | Portable (any distro) |
             | `cove-narrator_${{ env.VERSION }}_amd64.deb` | Linux | Debian/Ubuntu package |
 
-            Verify downloads with `checksums-sha256.txt`:
-            ```
-            sha256sum -c checksums-sha256.txt
-            ```
+            Windows and `.deb` assets are covered by `checksums-sha256.txt`; the
+            AppImage ships with its own `.sha256` sidecar.
           make_latest: true

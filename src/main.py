@@ -25,6 +25,12 @@ elif sys.platform.startswith('linux'):
             sys.path.append(_deps_str)
             site.addsitedir(_deps_str)
 
+if getattr(sys, 'frozen', False):
+    import multiprocessing
+    import shutil
+    _sys_py = shutil.which('python3') or shutil.which('python')
+    if _sys_py:
+        multiprocessing.set_executable(_sys_py)
 try:
     import torch
 except ImportError:

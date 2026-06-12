@@ -723,12 +723,10 @@ class CloneTab(QWidget):
         self._hd_deps_worker.start()
 
     def _on_hd_deps_installed(self):
-        import importlib
-        _ensure_hd_deps_on_path()
-        importlib.invalidate_caches()
         self._hd_btn.setEnabled(True)
-        self._hd_status.setText("Dependencies installed!")
-        self._on_hd_action(_after_install=True)
+        self._hd_status.setText(
+            "Dependencies installed! Restart the app to use HD Voice Clone."
+        )
 
     def _on_hd_deps_error(self, msg):
         self._hd_btn.setEnabled(True)
@@ -860,72 +858,63 @@ class _HDDepsInstallWorker(QThread):
                 )
                 return
 
-            base_cmd = [*pip_cmd, "install", "--progress-bar", "off",
-                        "--no-deps"]
+            cmd = [*pip_cmd, "install", "--progress-bar", "off"]
             if self._deps_dir:
                 self._deps_dir.mkdir(parents=True, exist_ok=True)
-                base_cmd += ["--target", str(self._deps_dir)]
+                cmd += ["--target", str(self._deps_dir)]
+            cmd += list(self.HD_PACKAGES)
+
+            self.progress.emit("Installing HD dependencies…")
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                **self._popen_kwargs(),
+            )
 
             start = time.monotonic()
             last_progress = 0.0
 
-            all_pkgs = list(self.HD_PACKAGES)
-            total = len(all_pkgs)
+            while proc.poll() is None:
+                time.sleep(2)
+                elapsed = time.monotonic() - start
+                elapsed_min = int(elapsed / 60)
+                elapsed_sec = int(elapsed % 60)
+                ts = f"{elapsed_min}:{elapsed_sec:02d}"
 
-            for pkg_i, pkg in enumerate(all_pkgs, 1):
-                pkg_label = pkg.split("==")[0]
-                self.progress.emit(
-                    f"Installing {pkg_label} ({pkg_i}/{total})…")
+                actual_mb = 0.0
+                if self._deps_dir and self._deps_dir.is_dir():
+                    try:
+                        actual_mb = sum(
+                            f.stat().st_size
+                            for f in self._deps_dir.rglob("*")
+                            if f.is_file()
+                        ) / 1_000_000
+                    except OSError:
+                        actual_mb = last_progress
+                    last_progress = actual_mb
 
-                proc = subprocess.Popen(
-                    [*base_cmd, pkg],
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    **self._popen_kwargs(),
+                pct = min(95, int(actual_mb / self.ESTIMATED_TOTAL_MB * 100))
+                if pct > 2 and elapsed > 10:
+                    eta_sec = elapsed / pct * (100 - pct)
+                    eta_min = max(1, int(eta_sec / 60))
+                    self.progress.emit(
+                        f"Installing… {pct}%  —  "
+                        f"ETA ~{eta_min} min  "
+                        f"({actual_mb:.0f} / ~{self.ESTIMATED_TOTAL_MB} MB)")
+                elif actual_mb > 0:
+                    self.progress.emit(
+                        f"Installing… "
+                        f"({actual_mb:.0f} MB)  [{ts}]")
+                else:
+                    self.progress.emit(
+                        f"Resolving dependencies… [{ts}]")
+
+            proc.wait(timeout=3600)
+
+            if proc.returncode != 0:
+                self.error.emit(
+                    "Installation failed. Check your internet connection."
                 )
-
-                while proc.poll() is None:
-                    time.sleep(2)
-                    elapsed = time.monotonic() - start
-                    elapsed_min = int(elapsed / 60)
-                    elapsed_sec = int(elapsed % 60)
-                    ts = f"{elapsed_min}:{elapsed_sec:02d}"
-
-                    actual_mb = 0.0
-                    if self._deps_dir and self._deps_dir.is_dir():
-                        try:
-                            actual_mb = sum(
-                                f.stat().st_size
-                                for f in self._deps_dir.rglob("*")
-                                if f.is_file()
-                            ) / 1_000_000
-                        except OSError:
-                            actual_mb = last_progress
-                        last_progress = actual_mb
-
-                    pct = min(95, int(actual_mb / self.ESTIMATED_TOTAL_MB * 100))
-                    if pct > 2 and elapsed > 10:
-                        eta_sec = elapsed / pct * (100 - pct)
-                        eta_min = max(1, int(eta_sec / 60))
-                        self.progress.emit(
-                            f"Installing {pkg_label}… {pct}%  —  "
-                            f"ETA ~{eta_min} min  "
-                            f"({actual_mb:.0f} / ~{self.ESTIMATED_TOTAL_MB} MB)")
-                    elif actual_mb > 0:
-                        self.progress.emit(
-                            f"Installing {pkg_label}… "
-                            f"({actual_mb:.0f} MB)  [{ts}]")
-                    else:
-                        self.progress.emit(
-                            f"Installing {pkg_label}… [{ts}]")
-
-                proc.wait(timeout=3600)
-
-                if proc.returncode != 0:
-                    self.error.emit(
-                        f"Installation of {pkg_label} failed. "
-                        "Check your internet connection."
-                    )
-                    return
+                return
 
             import importlib
             if self._deps_dir:

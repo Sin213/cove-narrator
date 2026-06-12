@@ -16,6 +16,7 @@ def find_matching_python(timeout: int = 10):
     subprocess, so they share one reliable interpreter instead of a hardcoded
     embeddable that the installer no longer bootstraps. Falls back to that
     embeddable if it happens to exist."""
+    import os
     import sys
     import shutil
     import subprocess
@@ -51,10 +52,32 @@ def find_matching_python(timeout: int = 10):
             pass
 
     if platform.system() == "Linux":
+        env = {**os.environ}
+        orig_ldpath = os.environ.get("APPIMAGE_ORIG_LD_LIBRARY_PATH")
+        if orig_ldpath is not None:
+            env["LD_LIBRARY_PATH"] = orig_ldpath
+        linux_candidates = []
         for name in ("python3", "python"):
             path = shutil.which(name)
             if path:
-                return [path]
+                linux_candidates.append(path)
+        pyenv_root = Path.home() / ".pyenv" / "versions"
+        if pyenv_root.is_dir():
+            for ver_dir in sorted(pyenv_root.iterdir(), reverse=True):
+                py = ver_dir / "bin" / "python3"
+                if py.exists():
+                    linux_candidates.append(str(py))
+        for path in linux_candidates:
+            try:
+                r = subprocess.run(
+                    [path, "-m", "pip", "--version"],
+                    capture_output=True, text=True, timeout=timeout,
+                    env=env,
+                )
+                if r.returncode == 0:
+                    return [path]
+            except Exception:
+                pass
 
     emb = Path(sys.executable).parent / "dependencies" / "_python" / "python.exe"
     if emb.exists():

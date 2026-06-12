@@ -871,9 +871,13 @@ class _HDDepsInstallWorker(QThread):
             pip_log = open(
                 pip_log_path, "w", encoding="utf-8", errors="replace"
             )
+            env = {**os.environ}
+            orig_ldpath = os.environ.get("APPIMAGE_ORIG_LD_LIBRARY_PATH")
+            if orig_ldpath is not None:
+                env["LD_LIBRARY_PATH"] = orig_ldpath
             proc = subprocess.Popen(
                 cmd, stdout=pip_log, stderr=subprocess.STDOUT,
-                **self._popen_kwargs(),
+                env=env, **self._popen_kwargs(),
             )
 
             start = time.monotonic()
@@ -974,13 +978,6 @@ class _HDDepsInstallWorker(QThread):
         if py:
             _hd_log(f"_find_pip: using {' '.join(py)} -m pip")
             return [*py, "-m", "pip"]
-
-        if platform.system() == "Linux":
-            for name in ("python3", "python"):
-                path = shutil.which(name)
-                if path:
-                    _hd_log(f"_find_pip: fallback to {path} -m pip")
-                    return [path, "-m", "pip"]
 
         ver_str = f"{sys.version_info.major}.{sys.version_info.minor}"
         if platform.system() == "Windows":

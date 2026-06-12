@@ -975,6 +975,13 @@ class _HDDepsInstallWorker(QThread):
             _hd_log(f"_find_pip: using {' '.join(py)} -m pip")
             return [*py, "-m", "pip"]
 
+        if platform.system() == "Linux":
+            for name in ("python3", "python"):
+                path = shutil.which(name)
+                if path:
+                    _hd_log(f"_find_pip: fallback to {path} -m pip")
+                    return [path, "-m", "pip"]
+
         ver_str = f"{sys.version_info.major}.{sys.version_info.minor}"
         if platform.system() == "Windows":
             self.progress.emit(

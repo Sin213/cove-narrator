@@ -50,6 +50,12 @@ def find_matching_python(timeout: int = 10):
         except Exception:
             pass
 
+    if platform.system() == "Linux":
+        for name in ("python3", "python"):
+            path = shutil.which(name)
+            if path:
+                return [path]
+
     emb = Path(sys.executable).parent / "dependencies" / "_python" / "python.exe"
     if emb.exists():
         return [str(emb)]

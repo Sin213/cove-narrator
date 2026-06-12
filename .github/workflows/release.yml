@@ -186,18 +186,21 @@ jobs:
           files: release/*
           fail_on_unmatched_files: true
           body: |
-            ## What's New in v2.1.1
+            ## What's New in v2.2.0
 
-            Patch release fixing HD Voice Clone on Windows portable builds.
+            HD Voice Clone (Qwen3-TTS) now works reliably on both Windows portable
+            builds and Linux AppImage, with the dependency and model stack fully
+            sorted out — plus a release-gated smoke test so it stays that way.
 
-            ### Fixes
-            - **HD model download no longer hangs** — the portable exe now shells out to its bundled Python for `snapshot_download`, fixing the freeze that occurred when downloading the 4.3 GB Qwen3-TTS model in-process from PyInstaller.
-            - **No more crash after download** — progress monitoring moved into the QThread instead of a bare `threading.Thread`, preventing a Qt6Core.dll crash caused by emitting signals from a non-Qt thread.
-            - **qwen-tts bundled into the app** — the `qwen-tts` package (826 KB) is now vendored directly, eliminating a pip install that dragged in ~500 MB of unnecessary dependencies (gradio, sox, torchaudio) and failed on fresh Windows machines.
-            - **Dark theme on Windows light mode** — scroll areas in the voice picker and phoneme panel now force dark backgrounds instead of inheriting the Windows system theme.
-            - **Fully USB-portable** — the HD model downloads to `dependencies/models/` next to the exe, so the entire app + deps + model can live on a USB drive.
+            ### HD Voice Clone
+            - **Generates real speech** — ships transformers 4.57.3 (the 5.x port produced degenerate, non-stop buzzing); a guard now purges a stale wrong-version deps dir so a clean, correct stack reinstalls.
+            - **Works on Linux AppImage** — frozen Linux uses XDG paths and a system `python3` for multiprocessing; HD deps install in a single dependency-resolving pip call for stability.
+            - **Reliable model download** — the portable exe shells out to a real Python for `snapshot_download`, fixing the hang and post-download crash on Windows; downloads to `dependencies/models/` next to the exe (fully USB-portable).
+            - **Slimmer, self-contained** — `qwen-tts` is vendored directly (no pip install dragging in gradio/sox/torchaudio); librosa replaced with numpy/scipy to fix startup crashes.
 
-            Thank you to Whooshy for reporting the download bug!
+            ### Quality
+            - **CI smoke test** — every tagged release now installs the pinned HD deps, downloads the model, generates a clip, and asserts non-degenerate output, blocking the release if HD clone regresses.
+            - Wider window resize grip for easier edge grabbing.
 
             ### Downloads
 

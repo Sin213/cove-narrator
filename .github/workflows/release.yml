@@ -144,10 +144,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           # Pins come straight from the app's HD_PACKAGES (single source of truth),
-          # installed --no-deps exactly as the shipped app does.
+          # installed in one call with pip resolving deps — matching the shipped
+          # app's `pip install <HD_PACKAGES>` (no --no-deps; that path was dropped
+          # for Linux AppImage stability and would no longer mirror the app).
           python scripts/_extract_hd_packages.py > hd-reqs.txt
           Get-Content hd-reqs.txt
-          python -m pip install --no-deps -r hd-reqs.txt
+          python -m pip install -r hd-reqs.txt
 
       - name: Download Qwen model (cached)
         shell: pwsh

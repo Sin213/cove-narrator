@@ -19,6 +19,25 @@ def log(m):
     print(m, flush=True)
 
 
+def _ensure_ref(path):
+    """CI has no committed reference wav (.hdtest_* is gitignored). Synthesize a
+    short voiced-like mono clip so the clone path has something to extract a
+    speaker embedding from. Voice quality is irrelevant — this only drives the
+    pipeline so generation can be asserted non-degenerate."""
+    if os.path.exists(path):
+        return
+    import numpy as np
+    import soundfile as sf
+    sr = 16000
+    t = np.linspace(0, 3.0, int(sr * 3.0), endpoint=False)
+    f0 = 120.0
+    sig = sum(np.sin(2 * np.pi * f0 * k * t) / k for k in (1, 2, 3, 4))
+    env = np.minimum(t / 0.05, (3.0 - t) / 0.05).clip(0, 1)
+    sig = (0.3 * sig * env).astype("float32")
+    sf.write(path, sig, sr)
+    log(f"generated synthetic reference wav -> {path}")
+
+
 def main():
     from src.engine.clone_tts import QwenCloneEngine
 
@@ -30,6 +49,7 @@ def main():
         return 2
 
     ref = os.path.join(_ROOT, ".hdtest_ref.wav")
+    _ensure_ref(ref)
     log(f"ref_audio: {ref} exists={os.path.exists(ref)}")
 
     log("=== load() ===")
@@ -44,8 +64,29 @@ def main():
     import soundfile as sf
     out = os.path.join(_ROOT, ".hdtest_out.wav")
     sf.write(out, audio, sr)
+    dur = len(audio) / sr
+    peak = float(np.max(np.abs(audio)))
     log(f"SYNTH OK -> {out} samples={len(audio)} sr={sr} "
-        f"dur={len(audio)/sr:.2f}s peak={float(np.max(np.abs(audio))):.3f}")
+        f"dur={dur:.2f}s peak={peak:.3f}")
+
+    # Assert non-degenerate output. The transformers-5.x port produced
+    # non-stop generation that ran to the length cap; correct 4.57.3 output
+    # for this short sentence terminates in a few seconds. A too-long clip or a
+    # silent one is a regression. Thresholds are env-overridable for tuning.
+    min_peak = float(os.environ.get("SMOKE_MIN_PEAK", "0.01"))
+    min_dur = float(os.environ.get("SMOKE_MIN_DUR", "0.4"))
+    max_dur = float(os.environ.get("SMOKE_MAX_DUR", "15.0"))
+    problems = []
+    if peak < min_peak:
+        problems.append(f"peak {peak:.4f} < {min_peak} (silent / no speech)")
+    if not (min_dur <= dur <= max_dur):
+        problems.append(
+            f"dur {dur:.2f}s outside [{min_dur}, {max_dur}]s "
+            f"(degenerate / non-terminating generation?)")
+    if problems:
+        log("SMOKE FAIL: " + "; ".join(problems))
+        return 3
+    log("SMOKE PASS")
     return 0
 
 

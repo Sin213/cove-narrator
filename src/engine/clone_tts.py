@@ -107,7 +107,8 @@ class QwenCloneEngine:
     @staticmethod
     def model_dir() -> Path:
         import sys
-        if getattr(sys, 'frozen', False):
+        import platform as _plat
+        if getattr(sys, 'frozen', False) and _plat.system() != "Linux":
             d = Path(sys.executable).parent / "dependencies" / "models" / "qwen3-tts-1.7b"
         else:
             d = Path.home() / ".config" / "cove-narrator" / "models" / "qwen3-tts-1.7b"
@@ -122,9 +123,10 @@ class QwenCloneEngine:
 
     def download(self, progress_cb=None):
         import sys
+        import platform as _plat
         if progress_cb:
             progress_cb("Starting Qwen3-TTS download…")
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, 'frozen', False) and _plat.system() != "Linux":
             self._download_subprocess(progress_cb)
         else:
             self._download_direct(progress_cb)
@@ -297,8 +299,15 @@ class QwenCloneEngine:
             ref_audio=ref_audio_path, ref_text="unused",
             x_vector_only_mode=True,
             non_streaming_mode=True,
+            repetition_penalty=1.0,
         )
         audio = wavs[0]
         if not isinstance(audio, np.ndarray):
             audio = audio.cpu().numpy()
-        return audio.astype(np.float32).squeeze(), int(sr)
+        audio = audio.astype(np.float32).squeeze()
+        fade_len = min(int(sr * 0.15), len(audio))
+        if fade_len > 0:
+            audio[-fade_len:] *= np.linspace(1.0, 0.0, fade_len, dtype=np.float32)
+        pad = np.zeros(int(sr * 0.2), dtype=np.float32)
+        audio = np.concatenate([audio, pad])
+        return audio, int(sr)

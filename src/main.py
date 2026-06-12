@@ -6,7 +6,7 @@ from pathlib import Path
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 os.environ["HF_HUB_DISABLE_XET"] = "1"
 
-if getattr(sys, 'frozen', False):
+if getattr(sys, 'frozen', False) and not sys.platform.startswith('linux'):
     _base = Path(sys.executable).parent
     _deps = _base / "dependencies" / "cove-narrator"
     if _deps.is_dir() and str(_deps) not in sys.path:
@@ -21,10 +21,14 @@ elif sys.platform.startswith('linux'):
     _deps = Path(_xdg) / "cove-narrator" / "hd-deps"
     if _deps.is_dir():
         _deps_str = str(_deps)
-        if _deps_str in sys.path:
-            sys.path.remove(_deps_str)
-        sys.path.insert(0, _deps_str)
-        site.addsitedir(_deps_str)
+        if _deps_str not in sys.path:
+            sys.path.append(_deps_str)
+            site.addsitedir(_deps_str)
+
+try:
+    import torch
+except ImportError:
+    pass
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 from src.app import MainWindow

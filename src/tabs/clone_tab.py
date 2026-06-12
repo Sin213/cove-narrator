@@ -32,6 +32,11 @@ SUPPORTED_FORMATS = (".mp3", ".wav", ".flac", ".ogg", ".m4a", ".opus", ".wma")
 
 def _hd_deps_dir() -> Path | None:
     if getattr(sys, 'frozen', False):
+        if platform.system() == "Linux":
+            xdg = os.environ.get(
+                "XDG_DATA_HOME", str(Path.home() / ".local" / "share")
+            )
+            return Path(xdg) / "cove-narrator" / "hd-deps"
         return Path(sys.executable).parent / "dependencies" / "cove-narrator"
     if platform.system() == "Linux":
         xdg = os.environ.get(
@@ -86,10 +91,9 @@ def _ensure_hd_deps_on_path():
     deps_dir = _hd_deps_dir()
     if deps_dir and deps_dir.is_dir():
         deps = str(deps_dir)
-        if deps in sys.path:
-            sys.path.remove(deps)
-        sys.path.insert(0, deps)
-        site.addsitedir(deps)
+        if deps not in sys.path:
+            sys.path.append(deps)
+            site.addsitedir(deps)
 
 
 class _AnalyzeWorker(QThread):
@@ -962,9 +966,6 @@ class _HDDepsInstallWorker(QThread):
         if not getattr(sys, 'frozen', False):
             return [sys.executable, "-m", "pip"]
 
-        # Use the same interpreter resolver as the model download, so deps are
-        # installed with — and the model is later downloaded by — the same real
-        # Python (e.g. `py -3.12`) instead of a fragile embeddable.
         from src.engine.clone_tts import find_matching_python
         py = find_matching_python()
         if py:

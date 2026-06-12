@@ -92,6 +92,9 @@ echo "==> Running PyInstaller"
     $STDLIB_HIDDEN \
     --hidden-import PySide6 \
     --hidden-import pymupdf \
+    --hidden-import pickletools \
+    --hidden-import colorsys \
+    --hidden-import filecmp \
     --exclude-module PySide6.QtWebEngineCore \
     --exclude-module PySide6.QtWebEngineWidgets \
     --exclude-module PySide6.QtQml \

@@ -1,6 +1,6 @@
 [project]
 name = "cove-narrator"
-version = "2.2.0"
+version = "2.2.1"
 description = "Offline TTS desktop app with phoneme-level voice building"
 requires-python = ">=3.10"
 dependencies = [

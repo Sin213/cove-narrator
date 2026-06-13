@@ -3,7 +3,7 @@ import site
 import sys
 from pathlib import Path
 
-from portable import is_portable, portable_data_dir
+from src.portable import is_portable, portable_data_dir
 
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 os.environ["HF_HUB_DISABLE_XET"] = "1"

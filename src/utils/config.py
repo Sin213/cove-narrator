@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-from portable import is_portable, portable_data_dir
+from src.portable import is_portable, portable_data_dir
 
 if is_portable():
     _CONFIG_DIR = Path(os.path.join(portable_data_dir("cove-narrator"), "config"))

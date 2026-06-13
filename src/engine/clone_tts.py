@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from portable import is_portable, portable_data_dir
+from src.portable import is_portable, portable_data_dir
 from src.engine.analyzer import analyze_reference
 from src.engine.voice_blend import find_best_blend
 from src.engine.tts import TTSEngine

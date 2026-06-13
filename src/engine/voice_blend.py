@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from kokoro_onnx import Kokoro
 
-from portable import is_portable, portable_data_dir
+from src.portable import is_portable, portable_data_dir
 from src.engine import audio_features as af
 
 

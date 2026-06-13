@@ -3,7 +3,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from portable import is_portable, portable_data_dir
+from src.portable import is_portable, portable_data_dir
 
 @dataclass
 class Preset:

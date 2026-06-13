@@ -20,7 +20,7 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
-from portable import is_portable, portable_data_dir
+from src.portable import is_portable, portable_data_dir
 from src.engine.clone_tts import VoiceMatchEngine, VoiceMatchResult
 from src.engine.tts import TTSEngine
 from src.engine.audio_dsp import slider_to_speed

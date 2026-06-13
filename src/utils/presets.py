@@ -1,6 +1,9 @@
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
+
+from portable import is_portable, portable_data_dir
 
 @dataclass
 class Preset:
@@ -48,7 +51,12 @@ _BUILTIN_VOICES = [
 
 class PresetManager:
     def __init__(self, config_dir: Path | None = None):
-        self._dir = config_dir or Path.home() / ".config" / "cove-narrator" / "presets"
+        if config_dir:
+            self._dir = config_dir
+        elif is_portable():
+            self._dir = Path(os.path.join(portable_data_dir("cove-narrator"), "config", "presets"))
+        else:
+            self._dir = Path.home() / ".config" / "cove-narrator" / "presets"
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def get_builtin_presets(self) -> list[Preset]:

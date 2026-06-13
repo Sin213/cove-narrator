@@ -20,6 +20,7 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
+from portable import is_portable, portable_data_dir
 from src.engine.clone_tts import VoiceMatchEngine, VoiceMatchResult
 from src.engine.tts import TTSEngine
 from src.engine.audio_dsp import slider_to_speed
@@ -31,6 +32,8 @@ SUPPORTED_FORMATS = (".mp3", ".wav", ".flac", ".ogg", ".m4a", ".opus", ".wma")
 
 
 def _hd_deps_dir() -> Path | None:
+    if is_portable():
+        return Path(os.path.join(portable_data_dir("cove-narrator"), "deps"))
     if getattr(sys, 'frozen', False):
         if platform.system() == "Linux":
             return Path.home() / ".local" / "share" / "cove-narrator" / "hd-deps"

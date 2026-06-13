@@ -2,11 +2,13 @@
 approximate a reference audio clip's pitch."""
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
 from kokoro_onnx import Kokoro
 
+from portable import is_portable, portable_data_dir
 from src.engine import audio_features as af
 
 
@@ -106,7 +108,12 @@ class CustomVoiceManager:
     """Saves and loads blended voice tensors as .npz files."""
 
     def __init__(self, config_dir: Path | None = None):
-        self._dir = config_dir or Path.home() / ".config" / "cove-narrator" / "voices"
+        if config_dir:
+            self._dir = config_dir
+        elif is_portable():
+            self._dir = Path(os.path.join(portable_data_dir("cove-narrator"), "config", "voices"))
+        else:
+            self._dir = Path.home() / ".config" / "cove-narrator" / "voices"
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def save(self, name: str, tensor: np.ndarray, weights: dict[str, float]) -> Path:

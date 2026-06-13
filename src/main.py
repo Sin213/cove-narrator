@@ -3,10 +3,16 @@ import site
 import sys
 from pathlib import Path
 
+from portable import is_portable, portable_data_dir
+
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 os.environ["HF_HUB_DISABLE_XET"] = "1"
 
-if getattr(sys, 'frozen', False) and not sys.platform.startswith('linux'):
+if is_portable():
+    _deps = Path(os.path.join(portable_data_dir("cove-narrator"), "deps"))
+    if _deps.is_dir() and str(_deps) not in sys.path:
+        site.addsitedir(str(_deps))
+elif getattr(sys, 'frozen', False) and not sys.platform.startswith('linux'):
     _base = Path(sys.executable).parent
     _deps = _base / "dependencies" / "cove-narrator"
     if _deps.is_dir() and str(_deps) not in sys.path:

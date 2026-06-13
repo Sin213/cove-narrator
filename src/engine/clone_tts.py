@@ -1,7 +1,9 @@
+import os
 from pathlib import Path
 
 import numpy as np
 
+from portable import is_portable, portable_data_dir
 from src.engine.analyzer import analyze_reference
 from src.engine.voice_blend import find_best_blend
 from src.engine.tts import TTSEngine
@@ -137,7 +139,9 @@ class QwenCloneEngine:
     def model_dir() -> Path:
         import sys
         import platform as _plat
-        if getattr(sys, 'frozen', False) and _plat.system() != "Linux":
+        if is_portable():
+            d = Path(os.path.join(portable_data_dir("cove-narrator"), "models", "qwen3-tts-1.7b"))
+        elif getattr(sys, 'frozen', False) and _plat.system() != "Linux":
             d = Path(sys.executable).parent / "dependencies" / "models" / "qwen3-tts-1.7b"
         else:
             d = Path.home() / ".config" / "cove-narrator" / "models" / "qwen3-tts-1.7b"
@@ -231,7 +235,10 @@ class QwenCloneEngine:
             )
 
         model_dir = self.model_dir()
-        deps_dir = Path(sys.executable).parent / "dependencies" / "cove-narrator"
+        if is_portable():
+            deps_dir = Path(os.path.join(portable_data_dir("cove-narrator"), "deps"))
+        else:
+            deps_dir = Path(sys.executable).parent / "dependencies" / "cove-narrator"
         script = (
             "import sys, os;"
             f"sys.path.insert(0, {str(deps_dir)!r});"

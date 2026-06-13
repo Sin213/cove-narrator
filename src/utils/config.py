@@ -1,7 +1,13 @@
 import json
+import os
 from pathlib import Path
 
-_CONFIG_DIR = Path.home() / ".config" / "cove-narrator"
+from portable import is_portable, portable_data_dir
+
+if is_portable():
+    _CONFIG_DIR = Path(os.path.join(portable_data_dir("cove-narrator"), "config"))
+else:
+    _CONFIG_DIR = Path.home() / ".config" / "cove-narrator"
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
 _OLD_CONFIG_DIR = Path.home() / ".config" / "whooshy"
 

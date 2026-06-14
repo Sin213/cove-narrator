@@ -235,29 +235,20 @@ jobs:
           fail_on_unmatched_files: true
           draft: true
           body: |
-            ## Cove Narrator v2.2.0
+            ## Cove Narrator v${{ env.VERSION }}
 
-            HD Voice Clone (Qwen3-TTS) is now fully working on **Windows**
-            (installer + portable) and **Linux** (AppImage + .deb). This release
-            fixes the dependency install, model download, and audio quality
-            end-to-end, and adds automated smoke tests so HD clone can't silently
-            regress again.
+            The Reader tab now opens EPUB books directly, alongside the existing
+            .txt and .pdf support.
 
-            ### 🎙️ HD Voice Clone — now reliable
-            - **Install no longer hangs.** The HD-dependency installer fed its pip subprocess through an unread pipe, which filled the Windows pipe buffer, deadlocked pip, and froze the UI on "Resolving dependencies…" forever. pip output now streams to a log file, so the install completes normally (~800 MB, ~1–2 min).
-            - **Generates real speech.** Ships transformers 4.57.3 — the 5.x port produced degenerate, non-terminating buzzing. A guard purges a stale wrong-version deps dir so a clean, correct stack always reinstalls.
-            - **Cleaner audio.** Greedy decoding (`do_sample=False`) for stable, properly-terminated output.
-            - **Reliable model download.** The portable exe shells out to a real Python for `snapshot_download`, fixing the earlier hang and post-download crash; the 4.3 GB model lands in `dependencies/models/` next to the exe (fully USB-portable).
-            - **Works on Linux AppImage.** Frozen Linux uses the correct XDG deps path and a system `python3` for multiprocessing; HD deps install in a single dependency-resolving pip call.
+            ### 📖 EPUB support
+            - **Open .epub files in the Reader.** Cove reads the book's spine to
+              pull chapters in the correct order, strips HTML markup and scripts,
+              and feeds clean text straight to the narrator.
+            - **No extra dependencies.** Parsing uses the Python standard library
+              only, so it adds nothing to the download size and works in both the
+              installer and portable builds.
 
-            ### 📦 Slimmer & more robust
-            - `qwen-tts` is vendored directly — no pip install dragging in gradio/sox/torchaudio.
-            - librosa replaced with numpy/scipy, fixing startup crashes.
-            - Full standard library bundled as hidden imports so the runtime-installed torch/transformers resolve inside the frozen app.
-
-            ### ✅ Quality gates
-            - **CI smoke tests on Windows *and* Linux** — every tagged release installs the pinned HD deps, downloads the model, generates a clip, and asserts non-degenerate speech, blocking the release if HD clone regresses on either platform.
-            - Wider window resize grip for easier edge grabbing.
+            Thanks to Whooshy for the suggestion.
 
             ### Downloads
 

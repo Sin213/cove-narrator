@@ -1,4 +1,5 @@
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -18,6 +19,56 @@ from src.utils.export import export_wav
 from src.utils.presets import Preset
 
 _SENTENCE_RE = re.compile(r'(?<=[.!?])\s+|\n\n+')
+
+# Block-level tags that should produce a paragraph break in extracted text.
+_BLOCK_TAGS = {
+    "p", "div", "br", "li", "tr", "blockquote", "section", "article",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+}
+_SKIP_TAGS = {"script", "style", "head", "title"}
+
+
+class _HTMLTextExtractor(HTMLParser):
+    """Collect visible text from (X)HTML, inserting breaks at block boundaries."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in _SKIP_TAGS:
+            self._skip_depth += 1
+        elif tag in _BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in _SKIP_TAGS and self._skip_depth:
+            self._skip_depth -= 1
+        elif tag in _BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_data(self, data):
+        if self._skip_depth == 0:
+            self._parts.append(data)
+
+    def get_text(self) -> str:
+        return "".join(self._parts)
+
+
+def _html_to_text(html: str) -> str:
+    parser = _HTMLTextExtractor()
+    parser.feed(html)
+    text = parser.get_text()
+    # Collapse intra-line whitespace (incl. &nbsp;/U+00A0), trim, squeeze blank runs.
+    lines = [re.sub(r'[^\S\n]+', ' ', ln).strip() for ln in text.split("\n")]
+    out = []
+    for ln in lines:
+        if ln:
+            out.append(ln)
+        elif out and out[-1] != "":
+            out.append("")
+    return "\n".join(out).strip()
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -88,7 +139,7 @@ class ReaderTab(QWidget):
         self._text_display = QTextEdit()
         self._text_display.setReadOnly(True)
         self._text_display.setPlaceholderText(
-            "Open a .txt or .pdf file, or paste text here to start reading.\n"
+            "Open a .txt, .pdf, or .epub file, or paste text here to start reading.\n"
             "Click anywhere in the text to start reading from that point."
         )
         self._text_display.setReadOnly(False)
@@ -189,13 +240,17 @@ class ReaderTab(QWidget):
     def _open_file(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "Open File", str(Path.home()),
-            "Supported Files (*.txt *.pdf);;Text Files (*.txt);;PDF Files (*.pdf);;All Files (*)"
+            "Supported Files (*.txt *.pdf *.epub);;Text Files (*.txt);;"
+            "PDF Files (*.pdf);;EPUB Files (*.epub);;All Files (*)"
         )
         if not path:
             return
         filepath = Path(path)
-        if filepath.suffix.lower() == ".pdf":
+        suffix = filepath.suffix.lower()
+        if suffix == ".pdf":
             text = self._extract_pdf(filepath)
+        elif suffix == ".epub":
+            text = self._extract_epub(filepath)
         else:
             try:
                 text = filepath.read_text(encoding="utf-8")
@@ -215,6 +270,61 @@ class ReaderTab(QWidget):
                 pages.append(text.strip())
         doc.close()
         return "\n\n".join(pages)
+
+    def _extract_epub(self, path: Path) -> str:
+        import zipfile
+        from posixpath import dirname, join, normpath
+        from xml.etree import ElementTree as ET
+
+        def localname(tag: str) -> str:
+            return tag.rsplit("}", 1)[-1]
+
+        with zipfile.ZipFile(str(path)) as zf:
+            names = set(zf.namelist())
+
+            # 1. Locate the OPF package document via the container.
+            opf_path = None
+            if "META-INF/container.xml" in names:
+                root = ET.fromstring(zf.read("META-INF/container.xml"))
+                for el in root.iter():
+                    if localname(el.tag) == "rootfile" and el.get("full-path"):
+                        opf_path = el.get("full-path")
+                        break
+            if opf_path is None:  # fall back to first .opf in the archive
+                opf_path = next((n for n in names if n.lower().endswith(".opf")), None)
+            if opf_path is None:
+                raise ValueError("No OPF package found in EPUB.")
+
+            opf_dir = dirname(opf_path)
+            opf = ET.fromstring(zf.read(opf_path))
+
+            # 2. Map manifest id -> href, then read spine in reading order.
+            manifest = {}
+            spine = []
+            for el in opf.iter():
+                name = localname(el.tag)
+                if name == "item" and el.get("id"):
+                    manifest[el.get("id")] = el.get("href", "")
+                elif name == "itemref" and el.get("idref"):
+                    spine.append(el.get("idref"))
+
+            chapters = []
+            for idref in spine:
+                href = manifest.get(idref)
+                if not href:
+                    continue
+                target = normpath(join(opf_dir, href)) if opf_dir else href
+                if target not in names:
+                    continue
+                try:
+                    html = zf.read(target).decode("utf-8")
+                except UnicodeDecodeError:
+                    html = zf.read(target).decode("latin-1")
+                text = _html_to_text(html)
+                if text.strip():
+                    chapters.append(text.strip())
+
+        return "\n\n".join(chapters)
 
     def _prepare_sentences(self):
         full_text = self._text_display.toPlainText()

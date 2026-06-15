@@ -56,12 +56,16 @@ class AudioPlayer(QObject):
             self.state_changed.emit("paused")
 
     def stop(self):
+        stream = self._stream
+        self._stream = None
         self._is_playing = False
         self._is_paused = False
-        if self._stream is not None:
-            self._stream.stop()
-            self._stream.close()
-            self._stream = None
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception:
+                pass
         self._position = 0
         self.state_changed.emit("stopped")
 
@@ -83,8 +87,14 @@ class AudioPlayer(QObject):
             self._position = end
 
     def _on_finished(self):
+        stream = self._stream
+        self._stream = None
         self._is_playing = False
         self._is_paused = False
-        self._stream = None
+        if stream is not None:
+            try:
+                stream.close()
+            except Exception:
+                pass
         self.playback_finished.emit()
         self.state_changed.emit("stopped")

@@ -81,6 +81,10 @@ class SimpleTab(QWidget):
         )
         layout.addWidget(self._text_edit)
 
+        self._dict_hint = QLabel("")
+        self._dict_hint.setStyleSheet("color: #ff6b6b; font-size: 11px;")
+        layout.addWidget(self._dict_hint)
+
         self._highlight_timer = QTimer()
         self._highlight_timer.setSingleShot(True)
         self._highlight_timer.setInterval(300)
@@ -187,6 +191,7 @@ class SimpleTab(QWidget):
             flagged_fmt.setBackground(QColor(255, 107, 107, 41))
             flagged_fmt.setForeground(QColor(255, 107, 107))
 
+            unknown_count = 0
             pos = 0
             for word, _, is_known in self._dict.lookup_with_flags(text):
                 idx = text.find(word, pos)
@@ -196,8 +201,17 @@ class SimpleTab(QWidget):
                     cursor.setPosition(idx)
                     cursor.setPosition(idx + len(word), QTextCursor.KeepAnchor)
                     cursor.setCharFormat(flagged_fmt)
+                    unknown_count += 1
                 pos = idx + len(word)
             cursor.endEditBlock()
+
+            if unknown_count > 0:
+                self._dict_hint.setText(
+                    f"{unknown_count} word(s) not in dictionary (highlighted). "
+                    "Use Custom mode for phonetic spelling."
+                )
+            else:
+                self._dict_hint.clear()
         finally:
             self._highlighting = False
 

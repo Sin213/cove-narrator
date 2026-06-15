@@ -122,8 +122,14 @@ class VoiceCard(QFrame):
         self._desc.setText(desc)
         self._avatar.setText(name[0] if name else "?")
         vid = preset.voice_id
-        self._region.setText("UK" if vid.startswith("b") else "US")
-        self._gender.setText("Female" if len(vid) > 1 and vid[1] == "f" else "Male")
+        if preset.accent:
+            self._region.setText(preset.accent.upper())
+        else:
+            self._region.setText("UK" if vid.startswith("b") else "US")
+        if preset.gender:
+            self._gender.setText(preset.gender.capitalize())
+        else:
+            self._gender.setText("Female" if len(vid) > 1 and vid[1] == "f" else "Male")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -294,7 +300,7 @@ class MainWindow(QMainWindow):
             self,
             icon_path=str(self._icon_path) if self._icon_path.exists() else None,
             title="Cove Narrator",
-            version="v2.2.2",
+            version="v2.2.3",
         )
         chrome.addWidget(self._titlebar)
 
@@ -456,6 +462,13 @@ class MainWindow(QMainWindow):
         if self._custom_voice_tensor is not None:
             return self._custom_voice_tensor
         if self._current_voice_preset:
+            if self._current_voice_preset.blend_key and self._current_voice_preset.voice_id == "custom_blend":
+                try:
+                    tensor, meta = self._custom_voices.load(self._current_voice_preset.blend_key)
+                    self._custom_voice_tensor = tensor
+                    return tensor
+                except Exception:
+                    return "af_heart"
             return self._current_voice_preset.voice_id
         return "af_heart"
 

@@ -14,6 +14,9 @@ class Preset:
     depth: int = 0
     is_builtin: bool = False
     blend_key: str = ""
+    accent: str = ""
+    gender: str = ""
+    language: str = "en"
 
 _BUILTIN_VOICES = [
     # American Female
@@ -71,6 +74,9 @@ class PresetManager:
                     name=data["name"], voice_id=data["voice_id"],
                     pitch=data.get("pitch", 0), speed=data.get("speed", 0), depth=data.get("depth", 0),
                     blend_key=data.get("blend_key", ""),
+                    accent=data.get("accent", ""),
+                    gender=data.get("gender", ""),
+                    language=data.get("language", "en"),
                 ))
             except (json.JSONDecodeError, KeyError):
                 continue
@@ -86,6 +92,12 @@ class PresetManager:
                 "pitch": preset.pitch, "speed": preset.speed, "depth": preset.depth}
         if preset.blend_key:
             data["blend_key"] = preset.blend_key
+        if preset.accent:
+            data["accent"] = preset.accent
+        if preset.gender:
+            data["gender"] = preset.gender
+        if preset.language and preset.language != "en":
+            data["language"] = preset.language
         path.write_text(json.dumps(data, indent=2))
 
     def delete_preset(self, name: str):

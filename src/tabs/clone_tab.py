@@ -195,6 +195,7 @@ class CloneTab(QWidget):
         self._worker = None
         self._analyze_worker = None
         self._recording = False
+        self._is_previewing = False
         self._rec_frames: list[np.ndarray] = []
         self._rec_stream = None
         self._rec_timer = QTimer()
@@ -286,6 +287,7 @@ class CloneTab(QWidget):
 
         self._text_edit = QTextEdit()
         self._text_edit.setPlaceholderText("Type the text you want spoken in the matched voice…")
+        self._text_edit.setStyleSheet("color: #ececf1;")
         self._text_edit.setMaximumHeight(100)
         layout.addWidget(self._text_edit)
 
@@ -425,6 +427,7 @@ class CloneTab(QWidget):
         try:
             from src.engine import audio_features as af
             y, sr = af.load_audio(self._ref_audio_path, sr=24000)
+            self._is_previewing = True
             self._player.load(y, sr)
             self._player.play()
         except Exception as e:
@@ -586,6 +589,7 @@ class CloneTab(QWidget):
         self._player.load(audio, sr)
         self._player.play()
         self._play_btn.setEnabled(True)
+        self._hd_status.clear()
         self._status.setText(f"Playing ({len(audio) / sr:.1f}s)")
 
     def _on_synth_error(self, msg: str):
@@ -605,6 +609,10 @@ class CloneTab(QWidget):
         self._status.setText(f"Exported: {path.name}")
 
     def _on_playback_state(self, state: str):
+        if self._is_previewing:
+            if state in ("stopped", "finished"):
+                self._is_previewing = False
+            return
         if state == "playing":
             self._play_btn.setText("⏸  Pause")
         elif state == "paused":
@@ -722,7 +730,7 @@ class CloneTab(QWidget):
     def _on_hd_deps_installed(self):
         self._hd_btn.setEnabled(True)
         self._hd_status.setText(
-            "Dependencies installed! Restart the app to use HD Voice Clone."
+            "Dependencies installed. Please restart the app - HD Clone will be ready immediately."
         )
 
     def _on_hd_deps_error(self, msg):

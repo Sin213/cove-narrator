@@ -149,9 +149,9 @@ class ReaderTab(QWidget):
         # Progress
         progress_row = QHBoxLayout()
         self._progress = QProgressBar()
-        self._progress.setMaximumHeight(16)
+        self._progress.setStyleSheet("QProgressBar { min-height: 20px; max-height: 20px; }")
         self._progress.setTextVisible(True)
-        self._progress.setFormat("%v / %m sentences")
+        self._progress.setFormat("%v / %m")
         progress_row.addWidget(self._progress)
         self._time_label = QLabel("")
         self._time_label.setObjectName("statusLabel")

@@ -11,7 +11,7 @@ from tempfile import NamedTemporaryFile
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QPushButton, QLabel, QFrame, QFileDialog,
-    QSlider, QSpinBox, QInputDialog,
+    QSlider, QSpinBox, QInputDialog, QComboBox,
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
@@ -196,6 +196,7 @@ class CloneTab(QWidget):
         self._analyze_worker = None
         self._recording = False
         self._is_previewing = False
+        self._needs_resynth = True
         self._rec_frames: list[np.ndarray] = []
         self._rec_stream = None
         self._rec_timer = QTimer()
@@ -265,6 +266,9 @@ class CloneTab(QWidget):
         self._pitch_slider, self._pitch_spin, pitch_group = self._make_slider("Pitch", "#7fd0ff")
         self._speed_slider, self._speed_spin, speed_group = self._make_slider("Speed", "#50e6cf")
         self._depth_slider, self._depth_spin, depth_group = self._make_slider("Depth", "#c89bff")
+        self._pitch_slider.valueChanged.connect(self._mark_dirty)
+        self._speed_slider.valueChanged.connect(self._mark_dirty)
+        self._depth_slider.valueChanged.connect(self._mark_dirty)
         slider_layout.addLayout(pitch_group)
         slider_layout.addLayout(speed_group)
         slider_layout.addLayout(depth_group)
@@ -289,6 +293,7 @@ class CloneTab(QWidget):
         self._text_edit.setPlaceholderText("Type the text you want spoken in the matched voice…")
         self._text_edit.setStyleSheet("color: #ececf1;")
         self._text_edit.setMaximumHeight(100)
+        self._text_edit.textChanged.connect(self._mark_dirty)
         layout.addWidget(self._text_edit)
 
         # -- Controls
@@ -303,6 +308,11 @@ class CloneTab(QWidget):
         self._stop_btn.setFocusPolicy(Qt.NoFocus)
         self._stop_btn.clicked.connect(self._on_stop)
         controls.addWidget(self._stop_btn)
+        self._mode_select = QComboBox()
+        self._mode_select.addItems(["Standard", "HD"])
+        self._mode_select.setFixedWidth(90)
+        self._mode_select.currentIndexChanged.connect(lambda: self._mark_dirty())
+        controls.addWidget(self._mode_select)
         self._export_btn = QPushButton("⬇  Export WAV")
         self._export_btn.setObjectName("exportButton")
         self._export_btn.setFocusPolicy(Qt.NoFocus)
@@ -316,12 +326,6 @@ class CloneTab(QWidget):
         self._status.setWordWrap(True)
         layout.addWidget(self._status)
 
-        # -- Optional HD neural cloning (single button → popup)
-        self._hd_btn = QPushButton("🎤  HD Voice Clone")
-        self._hd_btn.setObjectName("tagButton")
-        self._hd_btn.setFixedHeight(32)
-        self._hd_btn.clicked.connect(self._on_hd_action)
-        layout.addWidget(self._hd_btn)
         self._hd_status = QLabel("")
         self._hd_status.setObjectName("voiceDesc")
         self._hd_status.setWordWrap(True)
@@ -558,19 +562,31 @@ class CloneTab(QWidget):
 
     # -- Synthesis --
 
+    def _mark_dirty(self):
+        self._needs_resynth = True
+
     def _on_play(self):
         if self._player.is_paused:
             self._player.play()
+            return
+        if not self._needs_resynth and self._last_audio is not None:
+            self._player.load(self._last_audio, self._last_sr)
+            self._player.play()
+            dur = len(self._last_audio) / self._last_sr
+            self._status.setText(f"Replaying ({dur:.1f}s)")
             return
         text = self._text_edit.toPlainText().strip()
         if not text:
             self._status.setText("Type some text to speak.")
             return
+        if self._mode_select.currentText() == "HD":
+            self._on_hd_action()
+            return
         if self._match_result is None:
-            self._status.setText("Drop a reference clip first — the voice needs to be analyzed.")
+            self._status.setText("Drop a reference clip first - the voice needs to be analyzed.")
             return
         self._player.stop()
-        self._status.setText("Synthesizing…")
+        self._status.setText("Synthesizing...")
         self._play_btn.setEnabled(False)
         speed = slider_to_speed(self._speed_slider.value())
         if self._worker and self._worker.isRunning():
@@ -586,6 +602,7 @@ class CloneTab(QWidget):
     def _on_synth_done(self, audio: np.ndarray, sr: int):
         self._last_audio = audio
         self._last_sr = sr
+        self._needs_resynth = False
         self._player.load(audio, sr)
         self._player.play()
         self._play_btn.setEnabled(True)
@@ -684,7 +701,7 @@ class CloneTab(QWidget):
             if dlg.exec() != QMessageBox.Ok:
                 return
 
-        self._hd_btn.setEnabled(False)
+        self._play_btn.setEnabled(False)
         self._hd_status.setText("Downloading Qwen3-TTS model…")
         self._hd_download_worker = _HDDownloadWorker(qwen)
         self._hd_download_worker.progress.connect(lambda msg: self._hd_status.setText(msg))
@@ -719,7 +736,7 @@ class CloneTab(QWidget):
 
         deps_dir = _hd_deps_dir()
 
-        self._hd_btn.setEnabled(False)
+        self._play_btn.setEnabled(False)
         self._hd_status.setText("Installing HD dependencies…")
         self._hd_deps_worker = _HDDepsInstallWorker(deps_dir)
         self._hd_deps_worker.progress.connect(lambda msg: self._hd_status.setText(msg))
@@ -728,22 +745,21 @@ class CloneTab(QWidget):
         self._hd_deps_worker.start()
 
     def _on_hd_deps_installed(self):
-        self._hd_btn.setEnabled(True)
+        self._play_btn.setEnabled(True)
         self._hd_status.setText(
             "Dependencies installed. Please restart the app - HD Clone will be ready immediately."
         )
 
     def _on_hd_deps_error(self, msg):
-        self._hd_btn.setEnabled(True)
+        self._play_btn.setEnabled(True)
         self._hd_status.setText(f"Install failed: {msg}")
 
     def _on_hd_download_done(self):
-        self._hd_btn.setEnabled(True)
-        self._hd_btn.setText("🎤  Use HD Clone")
-        self._hd_status.setText("Download complete! Drop a reference clip and click 'Use HD Clone'.")
+        self._play_btn.setEnabled(True)
+        self._hd_status.setText("HD model ready. Select HD mode and press Speak.")
 
     def _on_hd_download_error(self, msg):
-        self._hd_btn.setEnabled(True)
+        self._play_btn.setEnabled(True)
         self._hd_status.setText(f"Download failed: {msg}")
 
     def _play_hd_clone(self):
@@ -757,8 +773,8 @@ class CloneTab(QWidget):
         if self._qwen_engine is None:
             from src.engine.clone_tts import QwenCloneEngine
             self._qwen_engine = QwenCloneEngine()
-        self._hd_btn.setEnabled(False)
-        self._hd_status.setText("Loading Qwen3-TTS…")
+        self._play_btn.setEnabled(False)
+        self._hd_status.setText("Loading Qwen3-TTS...")
         self._hd_synth_worker = _HDSynthWorker(self._qwen_engine, self._ref_audio_path, text)
         self._hd_synth_worker.progress.connect(lambda msg: self._hd_status.setText(msg))
         self._hd_synth_worker.finished.connect(self._on_hd_synth_done)
@@ -766,15 +782,16 @@ class CloneTab(QWidget):
         self._hd_synth_worker.start()
 
     def _on_hd_synth_done(self, audio: np.ndarray, sr: int):
-        self._hd_btn.setEnabled(True)
+        self._play_btn.setEnabled(True)
         self._last_audio = audio
         self._last_sr = sr
+        self._needs_resynth = False
         self._player.load(audio, sr)
         self._player.play()
         self._hd_status.setText(f"Playing HD clone ({len(audio) / sr:.1f}s)")
 
     def _on_hd_synth_error(self, msg):
-        self._hd_btn.setEnabled(True)
+        self._play_btn.setEnabled(True)
         self._hd_status.setText(f"Error: {msg}")
 
 

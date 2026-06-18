@@ -218,15 +218,17 @@ jobs:
         with:
           path: artifacts
 
-      - name: Collect release assets and generate checksum bundle
+      - name: Collect release assets and generate SHA256 sidecars
         run: |
           mkdir -p release
-          # AppImage is intentionally excluded — it is built and uploaded
+          # AppImage is intentionally excluded - it is built and uploaded
           # separately from a local Linux build, then added to the draft release.
           find artifacts -type f \( -name '*.deb' -o -name '*-Setup.exe' -o -name '*-Portable.exe' \) -exec cp {} release/ \;
           cd release
-          sha256sum * > checksums-sha256.txt
-          cat checksums-sha256.txt
+          for f in *.exe *.deb; do
+            [ -e "$f" ] && sha256sum "$f" > "$f.sha256"
+          done
+          cat *.sha256
 
       - name: Attach to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -259,6 +261,5 @@ jobs:
             | `Cove-Narrator-${{ env.VERSION }}-x86_64.AppImage` | Linux | Portable (any distro) |
             | `cove-narrator_${{ env.VERSION }}_amd64.deb` | Linux | Debian/Ubuntu package |
 
-            Windows and `.deb` assets are covered by `checksums-sha256.txt`; the
-            AppImage ships with its own `.sha256` sidecar.
+            Each asset ships with its own `.sha256` sidecar for verification.
           make_latest: true

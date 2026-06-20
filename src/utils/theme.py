@@ -4,7 +4,7 @@ COVE_STYLESHEET = """
    Accent: teal #50e6cf · Canvas: #0b0b10
    ================================================================ */
 
-QMainWindow { background: #0b0b10; }
+QMainWindow { background: #0b0b10; border: 4px solid rgba(255, 255, 255, 0.18); }
 QWidget { color: #ececf1; outline: none; }
 QLabel { background: transparent; }
 QFrame { background: transparent; }

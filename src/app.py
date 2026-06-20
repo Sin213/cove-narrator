@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QStackedWidget, QLabel, QInputDialog,
     QFrame, QDialog, QLineEdit, QScrollArea,
-    QGridLayout,
+    QGridLayout, QSizeGrip,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut, QIcon, QMouseEvent
@@ -286,6 +286,11 @@ class MainWindow(QMainWindow):
         self._custom_voice_weights = None
         self._custom_voices = CustomVoiceManager()
         self._resizer = FramelessResizer(self)
+        # Visible SE-corner resize grip so the user has a discoverable
+        # affordance to grab. FramelessResizer handles invisible edge drag.
+        self._size_grip = QSizeGrip(self)
+        self._size_grip.setFixedSize(16, 16)
+        self._size_grip.raise_()
         self.setMouseTracking(True)
 
         self.setStyleSheet(COVE_STYLESHEET)
@@ -365,6 +370,13 @@ class MainWindow(QMainWindow):
         self._select_initial_voice()
 
     # ---- sidebar -----------------------------------------------------------
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        # Reposition the SE-corner QSizeGrip on every resize so it stays
+        # pinned to the bottom-right of the window.
+        s = self._size_grip.sizeHint()
+        self._size_grip.move(self.width() - s.width(), self.height() - s.height())
+
     def _build_sidebar(self):
         sb = QFrame(objectName="sidebar")
         lay = QVBoxLayout(sb)

@@ -4,9 +4,9 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QStackedWidget, QLabel, QInputDialog,
     QFrame, QDialog, QLineEdit, QScrollArea,
-    QGridLayout, QSizeGrip,
+    QGridLayout, QSizeGrip, QApplication,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QEvent, QPointF
 from PySide6.QtGui import QKeySequence, QShortcut, QIcon, QMouseEvent
 
 from src.utils.config import load_config, save_config
@@ -270,7 +270,7 @@ class VoiceGalleryDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Cove Narrator v2.2.2")
+        self.setWindowTitle("Cove Narrator v2.2.5")
         self._icon_path = Path(__file__).resolve().parent.parent / "build" / "icon.png"
         if self._icon_path.exists():
             self.setWindowIcon(QIcon(str(self._icon_path)))
@@ -298,14 +298,14 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         chrome = QVBoxLayout(central)
-        chrome.setContentsMargins(0, 0, 0, 0)
+        chrome.setContentsMargins(4, 4, 4, 4)
         chrome.setSpacing(0)
 
         self._titlebar = CoveTitleBar(
             self,
             icon_path=str(self._icon_path) if self._icon_path.exists() else None,
             title="Cove Narrator",
-            version="v2.2.3",
+            version="v2.2.5",
         )
         chrome.addWidget(self._titlebar)
 
@@ -368,6 +368,7 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
         self._set_mode(0)
         self._select_initial_voice()
+        QApplication.instance().installEventFilter(self)
 
     # ---- sidebar -----------------------------------------------------------
     def resizeEvent(self, event):  # noqa: N802
@@ -648,6 +649,31 @@ class MainWindow(QMainWindow):
 
     def _export_current(self):
         self._stack.currentWidget()._on_export()
+
+    def eventFilter(self, obj, event):
+        etype = event.type()
+        if etype not in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress,
+                         QEvent.Type.MouseButtonRelease):
+            return super().eventFilter(obj, event)
+        if not isinstance(obj, QWidget) or obj is self or isinstance(obj, QSizeGrip):
+            return super().eventFilter(obj, event)
+        if obj.window() is not self:
+            return super().eventFilter(obj, event)
+        local_pos = obj.mapTo(self, event.position().toPoint())
+        mapped = QMouseEvent(
+            etype, QPointF(local_pos), event.globalPosition(),
+            event.button(), event.buttons(), event.modifiers(),
+        )
+        if etype == QEvent.Type.MouseButtonPress:
+            if self._resizer.try_press(mapped):
+                return True
+        elif etype == QEvent.Type.MouseMove:
+            if self._resizer.try_move(mapped):
+                return True
+        elif etype == QEvent.Type.MouseButtonRelease:
+            if self._resizer.try_release(mapped):
+                return True
+        return super().eventFilter(obj, event)
 
     def mousePressEvent(self, event: QMouseEvent):
         if self._resizer.try_press(event):

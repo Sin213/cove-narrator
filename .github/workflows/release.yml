@@ -239,18 +239,11 @@ jobs:
           body: |
             ## Cove Narrator v${{ env.VERSION }}
 
-            The Reader tab now opens EPUB books directly, alongside the existing
-            .txt and .pdf support.
+            ### Window chrome fixes
+            - Fixed missing left-side window border that was visible in other Cove apps but not Narrator
+            - Edge resize zones now extend over child widgets so you no longer have to target the exact border pixel to resize
 
-            ### 📖 EPUB support
-            - **Open .epub files in the Reader.** Cove reads the book's spine to
-              pull chapters in the correct order, strips HTML markup and scripts,
-              and feeds clean text straight to the narrator.
-            - **No extra dependencies.** Parsing uses the Python standard library
-              only, so it adds nothing to the download size and works in both the
-              installer and portable builds.
-
-            Thanks to Whooshy for the suggestion.
+            Thank you to Duck for pointing out the border issue.
 
             ### Downloads
 

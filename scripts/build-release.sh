@@ -8,7 +8,7 @@ cd "$ROOT"
 
 APP_NAME="cove-narrator"
 DISPLAY_NAME="Cove Narrator"
-VERSION="${VERSION:-2.2.3}"
+VERSION="${VERSION:-2.2.5}"
 ARCH="x86_64"
 DEB_ARCH="amd64"
 RELEASE_DIR="$ROOT/release"

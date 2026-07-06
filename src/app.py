@@ -6,9 +6,10 @@ from PySide6.QtWidgets import (
     QFrame, QDialog, QLineEdit, QScrollArea,
     QGridLayout, QSizeGrip, QApplication,
 )
-from PySide6.QtCore import Qt, Signal, QEvent, QPointF
+from PySide6.QtCore import Qt, Signal, QEvent, QPointF, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut, QIcon, QMouseEvent
 
+from src import __version__, updater
 from src.utils.config import load_config, save_config
 from src.utils.theme import COVE_STYLESHEET
 from src.utils.chrome import CoveTitleBar, FramelessResizer
@@ -270,7 +271,7 @@ class VoiceGalleryDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Cove Narrator v2.2.5")
+        self.setWindowTitle(f"Cove Narrator v{__version__}")
         self._icon_path = Path(__file__).resolve().parent.parent / "build" / "icon.png"
         if self._icon_path.exists():
             self.setWindowIcon(QIcon(str(self._icon_path)))
@@ -305,7 +306,7 @@ class MainWindow(QMainWindow):
             self,
             icon_path=str(self._icon_path) if self._icon_path.exists() else None,
             title="Cove Narrator",
-            version="v2.2.5",
+            version=f"v{__version__}",
         )
         chrome.addWidget(self._titlebar)
 
@@ -369,6 +370,15 @@ class MainWindow(QMainWindow):
         self._set_mode(0)
         self._select_initial_voice()
         QApplication.instance().installEventFilter(self)
+
+        self._updater = updater.UpdateController(
+            parent=self,
+            current_version=__version__,
+            repo="Sin213/cove-narrator",
+            app_display_name="Cove Narrator",
+            cache_subdir="cove-narrator",
+        )
+        QTimer.singleShot(4000, self._updater.check)
 
     # ---- sidebar -----------------------------------------------------------
     def resizeEvent(self, event):  # noqa: N802
